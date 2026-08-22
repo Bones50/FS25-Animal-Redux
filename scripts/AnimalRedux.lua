@@ -239,7 +239,7 @@ function AnimalRedux.onMissionLoaded()
     if AnimalFoodProbe ~= nil and AnimalFoodProbe.register ~= nil then
         local okP, registered = pcall(AnimalFoodProbe.register)
         if okP and registered then
-            AnimalRedux.warn("dev probe available: arFoodProbe [name fragment] [litres]")
+            AnimalRedux.warn("dev probes available: arFoodProbe [name] [litres], arFeedPartial [name]")
         end
     end
 

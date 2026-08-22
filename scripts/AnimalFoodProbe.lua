@@ -377,12 +377,141 @@ function AnimalFoodProbe.run(fragment, demandArg)
     out("all animal types probed. The MULTI-GROUP ones are the ones that answer the question.")
 end
 
+-- ============================================================================
+-- arFeedPartial -- is the production factor PRESENCE-based or QUANTITY-based?
+--
+-- THE QUESTION. Everything measured so far had each food group either absent or
+-- stocked well past its share, and the factor came out as the sum of the weights
+-- of the groups PRESENT. What happens in between -- 100 L of soybean when the
+-- pigs want 6,800 -- was never tested, and the two answers lead to very
+-- different advice:
+--
+--   PRESENCE-BASED  a trickle of each group is enough, and the practical rule is
+--                   just "get something from every group into every barn".
+--   QUANTITY-BASED  each group must supply its full share every hour, and DR's
+--                   sourcing has to keep pace or the factor sags.
+--
+-- HOW IT MEASURES. Every group is stocked far past its need, then ONE group is
+-- swept from empty up to twice its hourly requirement while the others are held
+-- constant -- so any movement in the factor is attributable to that group alone.
+--
+-- The sweep is in multiples of the group's HOURLY NEED (demand x its eat share),
+-- not of the trough, because "enough" can only mean "enough for what will be
+-- eaten this hour". Demand is the barn's real litersPerHour where it has one.
+--
+-- Single-group animals (sheep, chicken) are skipped: with one group the answer is
+-- the trivial "food or no food".
+--
+-- Usage: arFeedPartial [name fragment]
+-- ============================================================================
+
+-- Multiples of the group's hourly need. 0 and the 1 L token are the two that
+-- decide the question; the rest map whatever shape lies between them.
+local PARTIAL_MULT  = { 0, -1, 0.25, 0.5, 1.0, 2.0 }    -- -1 means "literally 1 L"
+local PARTIAL_LABEL = { "0 L", "1 L", "25%", "50%", "100%", "200%" }
+
+local function sweepBarn(p, ati, name)
+    local spec = p.spec_husbandryFood
+    local model = AnimalFeedModel.read(ati, spec.supportedFillTypes)
+    if model == nil or #model.groups < 2 then return false end
+
+    out("=================================================================")
+    out("%s   (%s, %d groups)", name, model.consumptionType, #model.groups)
+
+    local demand = AnimalFeedModel.demandPerHour(p)
+    if demand <= 0 then demand = 100 end
+
+    local eatSum = 0
+    for _, g in ipairs(model.groups) do
+        if g.rep ~= nil then eatSum = eatSum + g.eat end
+    end
+    if eatSum <= 0 then
+        out("  no usable groups in this building")
+        return true
+    end
+
+    -- baseline: every group stocked far past anything it could eat this hour
+    local BIG = math.max(demand * 50, 10000)
+    local base = {}
+    for _, g in ipairs(model.groups) do
+        if g.rep ~= nil then base[g.rep] = BIG * g.eat / eatSum end
+    end
+    local fullF = select(1, AnimalFeedModel.measureFactor(p, ati, base, demand))
+    out("  demand %.2f L/h; all groups stocked far past need -> factor %s",
+        demand, fullF ~= nil and string.format("%.4f", fullF) or "?")
+
+    local row = string.format("  %-20s", "group / stock")
+    for _, lbl in ipairs(PARTIAL_LABEL) do row = row .. string.format(" %8s", lbl) end
+    out("%s", row)
+
+    for _, g in ipairs(model.groups) do
+        if g.rep ~= nil then
+            local need = demand * g.eat / eatSum
+            local line = string.format("  %-20s", g.title)
+            for i = 1, #PARTIAL_LABEL do
+                local mult = PARTIAL_MULT[i]
+                local litres = (mult < 0) and 1 or (need * mult)
+                local mix = {}
+                for ft, v in pairs(base) do mix[ft] = v end
+                mix[g.rep] = litres
+                local f = select(1, AnimalFeedModel.measureFactor(p, ati, mix, demand))
+                line = line .. string.format(" %8s",
+                    f ~= nil and string.format("%.4f", f) or "?")
+            end
+            out("%s   (needs %.1f L/h of %s)", line, need, ftName(g.rep))
+        end
+    end
+
+    out("  READ IT: if the 1 L column already matches the 200%% column, the factor is")
+    out("  PRESENCE-based and a trickle of each group is enough. If it climbs across")
+    out("  the row, it is QUANTITY-based and every group must be kept to its share.")
+    return true
+end
+
+function AnimalFoodProbe.runPartial(fragment)
+    local ps = g_currentMission ~= nil and g_currentMission.placeableSystem or nil
+    if ps == nil then out("no placeableSystem"); return end
+    if AnimalFeedModel == nil then out("AnimalFeedModel is not loaded"); return end
+
+    local seen, reported = {}, 0
+    for _, p in ipairs(ps.placeables) do
+        if p.spec_husbandryFood ~= nil then
+            local name = "?"
+            local okN, nm = pcall(function() return p:getName() end)
+            if okN and nm ~= nil then name = tostring(nm) end
+            local matches = fragment == nil or fragment == ""
+                or string.find(string.lower(name), string.lower(fragment), 1, true) ~= nil
+            local ati = AnimalFeedModel.animalTypeIndexOf(p)
+            if matches and ati ~= nil and seen[ati] == nil then
+                seen[ati] = true
+                if sweepBarn(p, ati, name) then reported = reported + 1 end
+            end
+        end
+    end
+
+    out("=================================================================")
+    if reported == 0 then
+        out("no multi-group animal type found%s; a single-group animal cannot answer this.",
+            (fragment ~= nil and fragment ~= "") and (" matching '" .. tostring(fragment) .. "'") or "")
+    else
+        out("%d multi-group animal type(s) swept.", reported)
+    end
+end
+
+function AnimalFoodProbe:consoleCommandPartial(fragment)
+    local ok, err = pcall(AnimalFoodProbe.runPartial, fragment)
+    if not ok then return "arFeedPartial failed: " .. tostring(err) end
+    return "arFeedPartial done -- see log.txt"
+end
+
 -- ---------------------------------------------------------------------------
 function AnimalFoodProbe.register()
     if addConsoleCommand == nil then return false end
     if AnimalFoodProbe._registered then return true end
     addConsoleCommand("arFoodProbe", "Measure the animal food mix -> production factor curve",
         "consoleCommand", AnimalFoodProbe)
+    addConsoleCommand("arFeedPartial", "Is the food factor presence-based or quantity-based?",
+        "consoleCommandPartial", AnimalFoodProbe)
     AnimalFoodProbe._registered = true
     return true
 end
