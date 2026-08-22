@@ -285,11 +285,25 @@ function AnimalFeedModel.planWithin(model, litres, allowed)
     if #usable == 0 then return out end
 
     if model.consumptionType == "SERIAL" then
-        local best = usable[1]
+        -- ONE request, with EVERY tier offered as an alternative.
+        --
+        -- Naming only the best tier repeated the pigsty bug one level up: with TMR
+        -- stopped, the plan asked for FORAGE, the farm had none, DR emitted no slot
+        -- and delivered nothing -- while silage and hay sat in the silos unasked
+        -- for and the cows fell back to grazing the meadow. "Best" had been chosen
+        -- from what the barn ACCEPTS, not from what the farm HAS.
+        --
+        -- Listing every tier does not lose the quality preference, because DR
+        -- already applies it: buildSlotCandidates sorts candidates by the food
+        -- quality map (productionWeight) and only then by distance. So DR takes
+        -- the best tier it can actually source and falls back when that runs
+        -- short -- which is exactly what its own best-first logic always did well,
+        -- and the reason SERIAL animals never needed fixing in the first place.
+        local all = {}
         for _, u in ipairs(usable) do
-            if u.production > best.production then best = u end
+            for _, ft in ipairs(u.members) do all[#all + 1] = ft end
         end
-        out[1] = { fillTypes = best.members, litres = litres }
+        out[1] = { fillTypes = all, litres = litres }
         return out
     end
 
