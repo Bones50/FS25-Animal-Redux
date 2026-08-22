@@ -125,12 +125,32 @@ function AnimalFeedModel.read(animalTypeIndex, supportedFillTypes)
 
     table.sort(groups, function(a, b) return a.production > b.production end)
 
+    -- MIXTURES (complete rations, e.g. PIGFOOD). These belong to NO group, which
+    -- is why the model ignored them at first -- and that was a regression waiting
+    -- to happen: `addFood` DECOMPOSES a mixture into its ingredients by weight
+    -- (PlaceableHusbandryFood.lua:546), so one delivery satisfies every group in
+    -- the recipe's ratio. A farm whose protein all goes INTO making pigfood has no
+    -- loose soybean, so a plan naming soybean scores 0.80 where DR's own logic
+    -- would have used the pigfood and scored 1.00.
+    local mixtures = {}
+    if afs.getMixturesByAnimalTypeIndex ~= nil then
+        local okM, mix = pcall(afs.getMixturesByAnimalTypeIndex, afs, animalTypeIndex)
+        if okM and type(mix) == "table" then
+            for _, ft in ipairs(mix) do
+                if supportedFillTypes == nil or supportedFillTypes[ft] ~= nil then
+                    mixtures[#mixtures + 1] = ft
+                end
+            end
+        end
+    end
+
     local ctype, ctypeSource = readConsumptionType(food, groups)
     return {
         animalTypeIndex = animalTypeIndex,
         consumptionType = ctype,
         consumptionTypeSource = ctypeSource,
         groups = groups,
+        mixtures = mixtures,
         hasEatWeight = sawEatWeight,
     }
 end
@@ -303,12 +323,33 @@ function AnimalFeedModel.planWithin(model, litres, allowed)
     local ok = {}
     for _, ft in ipairs(allowed) do ok[ft] = true end
 
+    -- A COMPLETE RATION IS AN ALTERNATIVE TO EVERY GROUP, and that is exactly how
+    -- it is offered: appended to each entry's fillTypes rather than handled as a
+    -- special case.
+    --
+    -- It works because DR's foodQualityMap already ranks a mixture at 1.0, ABOVE
+    -- every group weight, so buildSlotCandidates sorts it first in every request
+    -- that lists it. If the farm has pigfood, DR sources pigfood for each group's
+    -- share; every litre decomposes into the full recipe ratio, so the pool ends
+    -- up correctly mixed from one product. If pigfood runs out, each request falls
+    -- back to that group's own crops. If there is none at all, nothing changes.
+    --
+    -- No sourcing query needed: DR already answers "which of these can I get" at
+    -- slot-build time, which is the whole point of the alternatives form.
+    local rations = {}
+    for _, ft in ipairs(model.mixtures or {}) do
+        if ok[ft] then rations[#rations + 1] = ft end
+    end
+
     local usable, sum = {}, 0
     for _, g in ipairs(model.groups) do
         local members = {}
         for _, ft in ipairs(g.fts) do
             if ok[ft] then members[#members + 1] = ft end
         end
+        -- offered even when the group itself has no allowed member: a complete
+        -- ration can satisfy a group whose own crops are blocked or absent
+        for _, ft in ipairs(rations) do members[#members + 1] = ft end
         if #members > 0 then
             usable[#usable + 1] = { members = members, eat = g.eat, production = g.production }
             sum = sum + g.eat
