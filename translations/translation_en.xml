@@ -1,17 +1,56 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
-<!-- Animal Redux, English.
+<!-- ===========================================================================
+     Animal Redux, ENGLISH. This is the reference file: every other language is
+     a copy of it with the text attributes translated.
 
-     An external translation file is ALREADY language specific, so entries carry
-     no <en> sub element. That form belongs only inside modDesc.
+     ADDING A LANGUAGE
+       Copy this file to translation_<code>.xml (translation_de.xml,
+       translation_fr.xml, ...) and translate ONLY the text attributes. Leave
+       every name attribute exactly as it is: those are keys, not words.
+       PARTIAL TRANSLATIONS ARE WELCOME AND SAFE. Any key you leave out falls
+       back to the English shipped in the code, so a half-finished file never
+       breaks the mod and never shows a raw key on screen.
 
-     To add a language, copy this file to translation_<code>.xml and translate the
-     text attributes. Partial translations are safe: any key missing here falls
-     back to the literal shipped in the Lua.
+     TWO RULES THAT WILL BITE YOU
+       1. An XML comment may not contain a double hyphen ANYWHERE. It is a parse
+          error and the whole file silently fails to load, taking every string
+          with it. Note the asymmetry: a double hyphen inside a text attribute
+          is perfectly legal, so the file may well contain them.
+       2. Overrun text is CLIPPED, not wrapped. Table columns and the footer
+          button bar are fixed width, so a translation longer than its budget
+          is silently cut off mid-word. German runs roughly 30 percent longer
+          than English. Character budgets are noted per block below.
 
-     NOTE an XML comment may not contain a double hyphen anywhere. It is a parse
-     error and the whole file silently fails to load. -->
+     KEY NAMING, so a key can be found from what it does
+       ar_ui_*      page titles, tab names, section headings
+       ar_col_*     table column headers      (TIGHT: budget noted per column)
+       ar_btn_*     buttons                   (TIGHT: the footer bar is shared)
+       ar_set_*     settings. Convention, NOT a parallel list:
+                      ar_set_<id>        the row title
+                      ar_set_<id>_tt     its tooltip
+                      ar_set_<id>_v<N>   value label N, counting from 1
+                    Resolving by convention rather than an array means the
+                    labels cannot drift out of step with the values, which
+                    matters because the SAVE FILE AND THE NETWORK CARRY THE
+                    INDEX, never the label. A mislabel is a player choosing one
+                    thing while the screen says another.
+       ar_msg_*     in game messages and notifications
+       ar_status_*  status words shown in a cell
+       ar_food_*    feed and ration vocabulary
+       ar_rule_*    auto sell rule vocabulary
+
+     WHAT IS DELIBERATELY NOT HERE
+       Log output. A player pasting log.txt into a bug report needs it in
+       English, and so do we. Internal enum values and anything compared against
+       a literal are likewise never translated: they are keys wearing the
+       costume of words.
+     =========================================================================== -->
 <l10n>
     <texts>
-        <text name="ar_modTitle" text="Animal Redux"/>
+        <!-- Self test. Resolved once at load so a broken translation chain is
+             reported in log.txt immediately, rather than surfacing later as
+             mysteriously untranslated UI. The value is matched in code, so
+             LEAVE IT AS "ok" IN EVERY LANGUAGE. -->
+        <text name="ar_l10n_selftest" text="ok"/>
     </texts>
 </l10n>

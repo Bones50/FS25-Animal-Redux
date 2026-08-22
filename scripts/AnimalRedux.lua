@@ -44,6 +44,50 @@ AnimalRedux.DR_MIN_API  = 1
 
 AnimalRedux.debug = false
 
+-- ---------------------------------------------------------------------------
+-- LOCALISATION
+--
+-- Declared HERE, at the top, because other files call it during GUI setup and a
+-- reference below its definition resolves to a nil global -- which `luac -p`
+-- does NOT catch (it parses fine and throws only when reached, mid-populate,
+-- showing as an empty page). Same trap DR hit twice (CLAUDE.md 5.44 / 5.57).
+--
+-- THE NAMESPACE ARGUMENT IS NOT OPTIONAL. Lua has no customEnvironment of its
+-- own, so `g_i18n:getText(key)` without MOD_NAME misses into the BASE GAME's
+-- table and silently falls back for ever -- which looks exactly like "l10n is
+-- not working" with nothing in the log. XML is different: `$l10n_key` in
+-- gui/*.xml resolves against this mod automatically, because the engine sets
+-- customEnvironment from the file's own path.
+--
+-- EVERYTHING DEGRADES TO THE SHIPPED ENGLISH. A missing key, a partial
+-- translation, an unparseable language file or an l10n system not yet up all
+-- yield `fallback` -- never a raw key on screen. That is what makes accepting
+-- partial community translations safe.
+--
+-- CONVENTIONS (see translations/translation_en.xml for the full list):
+--   * every key is prefixed `ar_`
+--   * NEVER translate an internal enum, a table key, or anything compared
+--     against a literal. Translate only what is DISPLAYED. DR shipped a bug of
+--     exactly this shape (role tags used as sort keys, CLAUDE.md 6.14).
+--   * NEVER translate log output. A player pasting log.txt into a bug report
+--     needs it in English, and so do we.
+--   * build sentences with FORMAT STRINGS, never concatenation -- word order
+--     differs by language.
+--   * separate whole-sentence singular and plural keys; do not manufacture a
+--     singular by trimming an "s".
+function AnimalRedux.l10n(key, fallback)
+    if key == nil then return fallback end
+    if g_i18n ~= nil and g_i18n.hasText ~= nil and g_i18n.getText ~= nil then
+        local ok, has = pcall(g_i18n.hasText, g_i18n, key, AnimalRedux.MOD_NAME)
+        if ok and has then
+            local ok2, text = pcall(g_i18n.getText, g_i18n, key, AnimalRedux.MOD_NAME)
+            -- "" is a real miss, not a translation choosing to say nothing.
+            if ok2 and text ~= nil and text ~= "" then return text end
+        end
+    end
+    return fallback
+end
+
 -- Resolved on mission load. nil until then, and nil for ever if DR is absent.
 AnimalRedux.DR = nil            -- DR's SmartDistribution table
 AnimalRedux.enabled = false
@@ -134,6 +178,23 @@ function AnimalRedux.onMissionLoaded()
     AnimalRedux.warn("v%s linked to Distribution Redux (global '%s', API v%d%s)",
         AnimalRedux.VERSION, tostring(whereOrWhy), apiVersion,
         apiOk and "" or string.format("; this mod wants v%d+", AnimalRedux.DR_MIN_API))
+
+    -- L10N SELF-TEST. There is no UI yet, so nothing else would reveal a broken
+    -- translation chain until the first screen is built -- and by then the cause
+    -- (file not packed, wrong filenamePrefix, missing namespace argument) is
+    -- tangled up with whatever else that screen does. This resolves one known
+    -- key and reports the answer, so the chain is proven end to end before it
+    -- carries anything. Costs one table lookup at load.
+    local probe = AnimalRedux.l10n("ar_l10n_selftest", "FALLBACK")
+    if probe == "ok" then
+        AnimalRedux.warn("l10n OK (translations/translation_en.xml resolved against '%s')",
+            AnimalRedux.MOD_NAME)
+    else
+        AnimalRedux.warn("l10n NOT RESOLVING (got '%s'): every string will show its English "
+            .. "fallback. Check that translations/ is in the deploy allowlist and that "
+            .. "modDesc declares <l10n filenamePrefix=\"translations/translation\"/>.",
+            tostring(probe))
+    end
 
     -- TEMPORARY dev probe (arFoodProbe). Registration is separate from the link
     -- itself so a probe failure can never stop the mod loading. Console commands

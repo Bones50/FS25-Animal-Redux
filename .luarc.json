@@ -1,0 +1,39 @@
+{
+	"$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting.schema.json",
+
+	"runtime.version": "Lua 5.1",
+
+	"diagnostics.globals": [
+		"g_currentMission", "g_currentModName", "g_currentModDirectory",
+		"g_i18n", "g_gui", "g_modManager", "g_server", "g_client",
+		"g_fillTypeManager", "g_storeManager", "g_densityMapHeightManager",
+		"g_mapManager", "g_soundManager", "g_messageCenter", "g_asyncTaskManager",
+
+		"Utils", "MathUtil", "Logging", "Class", "SpecializationUtil",
+		"XMLFile", "XMLValueType", "GuiUtils", "GuiElement", "TabbedMenu",
+		"FillPlaneUtil", "DensityMapHeightUtil", "FSDensityMapUtil",
+		"ClassUtil", "StringUtil", "Overlay",
+
+		"Mission00", "Placeable", "PlaceableSystem", "Storage", "PalletSpawner",
+		"BunkerSilo", "SellingStation", "UnloadingStation", "ProductionPoint",
+		"AnimalFoodSystem", "AnimalSystem", "AnimalType", "AnimalCluster",
+		"FarmManager", "FSCareerMissionInfo", "InputAction", "Event",
+
+		"addConsoleCommand", "removeConsoleCommand", "addModEventListener",
+		"getUserProfileAppPath", "fileExists", "createFolder", "getfenv",
+		"getWorldTranslation", "localToWorld", "localDirectionToWorld",
+		"getTimeSec", "printCallstack", "streamWriteString", "streamReadString",
+		"streamWriteInt32", "streamReadInt32", "streamWriteUIntN", "streamReadUIntN",
+		"streamWriteBool", "streamReadBool", "streamWriteFloat32", "streamReadFloat32",
+		"NetworkUtil", "unpack",
+
+		"AnimalRedux", "AnimalFoodProbe",
+		"FS25_Distribution_Redux", "SmartDistribution"
+	],
+
+	"diagnostics.disable": [
+		"lowercase-global"
+	],
+
+	"workspace.checkThirdParty": false
+}
