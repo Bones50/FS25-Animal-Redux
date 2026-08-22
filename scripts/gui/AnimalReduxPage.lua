@@ -130,6 +130,20 @@ function AnimalReduxPage:rebuild()
     self.barns = {}
     local ps = g_currentMission ~= nil and g_currentMission.placeableSystem or nil
     if ps == nil then return end
+    -- THIS FARM'S BUILDINGS ONLY. Walking every placeable with a food spec listed
+    -- husbandries that belong to the MAP, not the player: three "Shed With Open
+    -- Chicken Pasture" turned up that are nowhere on the farm (and appear in no
+    -- savegame -- they are map-embedded). DR would never feed them, so a tab
+    -- about whether DR is feeding things correctly must not show them.
+    --
+    -- Both tests are DR's own, so this tab shows exactly the set DR manages:
+    --   isAssetEnrolled  participation, and the Animal Husbandry class toggle
+    --   _farmCanUse      ownership, including the public-map-storage rule (5.63)
+    -- Each fails OPEN if DR does not expose it, so a version mismatch shows too
+    -- much rather than an empty tab.
+    local SD = AnimalRedux ~= nil and AnimalRedux.DR or nil
+    local myFarm = (SD ~= nil and SD._playerFarmId ~= nil) and SD._playerFarmId() or nil
+
     local seen = {}
     for _, p in ipairs(ps.placeables) do
         -- ONE ROW PER PLACEABLE. Guarding on identity rather than trusting the
@@ -137,9 +151,14 @@ function AnimalReduxPage:rebuild()
         -- silently showing it twice is exactly the sort of thing that gets
         -- mistaken for the farm really having two of them.
         if p.spec_husbandryFood ~= nil and seen[p] == nil then
-            seen[p] = true
-            local b = readBarn(p)
-            if b ~= nil then self.barns[#self.barns + 1] = b end
+            local enrolled = SD == nil or SD.isAssetEnrolled == nil or SD.isAssetEnrolled(p)
+            local usable   = myFarm == nil or SD == nil or SD._farmCanUse == nil
+                             or SD._farmCanUse(p, myFarm)
+            if enrolled and usable then
+                seen[p] = true
+                local b = readBarn(p)
+                if b ~= nil then self.barns[#self.barns + 1] = b end
+            end
         end
     end
 
