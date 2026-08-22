@@ -174,27 +174,13 @@ local function consumedText(consumed)
 end
 
 -- ---------------------------------------------------------------------------
-function AnimalFoodProbe.run(fragment, demandArg)
-    local demand = tonumber(demandArg) or DEMAND
-
-    local barns = AnimalFoodProbe.findBarns(fragment)
-    if #barns == 0 then
-        out("no husbandry with a food spec found%s.",
-            (fragment ~= nil and fragment ~= "") and (" matching '" .. tostring(fragment) .. "'") or "")
-        return
-    end
-
-    local barn = barns[1]
+---Probe ONE barn.
+function AnimalFoodProbe.probeBarn(barn, demand)
     local p    = barn.placeable
     local spec = p.spec_husbandryFood
 
     out("=====================================================================")
-    out("barn: %s   (%d matched; probing the first)", barn.name, #barns)
-    if #barns > 1 then
-        local names = {}
-        for i = 1, #barns do names[#names + 1] = barns[i].name end
-        out("  others: %s", table.concat(names, " | "))
-    end
+    out("barn: %s", barn.name)
 
     local ati = AnimalFoodProbe.animalTypeIndexOf(p)
     if ati == nil then
@@ -235,6 +221,14 @@ function AnimalFoodProbe.run(fragment, demandArg)
         out("  weights sum to %.3f  <- a RATIO: the target is a MIX, not a single best food", wsum)
     else
         out("  weights sum to %.3f  <- does NOT sum to 1; interpret with care", wsum)
+    end
+
+    -- A single group cannot be mis-mixed: there is nothing to trade off, so
+    -- best-first and the declared ratio are the SAME instruction. Say so, or a
+    -- 1.0000 / 1.0000 result reads as evidence when it is just a degenerate case.
+    if #groups < 2 then
+        out("  ONLY ONE GROUP -- this animal type is trivially unaffected by fill order.")
+        out("  The mix question can only be answered by a MULTI-GROUP animal (cow / pig / sheep / horse).")
     end
 
     local mixes = AnimalFoodProbe.mixturesFor(ati)
@@ -298,6 +292,20 @@ function AnimalFoodProbe.run(fragment, demandArg)
         end
     end
 
+    -- WITHIN one group: are its fill types interchangeable? The Grain group is
+    -- WHEAT BARLEY SORGHUM, and if all three score the same then DR's per-fill-type
+    -- preference is meaningless inside a group and only the GROUP SPLIT matters --
+    -- which decides how granular the replacement model actually needs to be.
+    if top ~= nil then
+        local alt = nil
+        for _, ft in ipairs(top.fts) do
+            if ft ~= top.rep and supported[ft] ~= nil then alt = ft; break end
+        end
+        if alt ~= nil then
+            addSample(string.format("100%% %s (same group)", ftName(alt)), { [alt] = total })
+        end
+    end
+
     for _, ft in ipairs(mixes) do
         if supported[ft] ~= nil then
             addSample(string.format("100%% %s (mixture)", ftName(ft)), { [ft] = total })
@@ -320,9 +328,53 @@ function AnimalFoodProbe.run(fragment, demandArg)
     end
 
     out("---------------------------------------------------------------------")
-    out("HOW TO READ IT: if DECLARED RATIO scores HIGHER than '100%% <top group>',")
-    out("filling best-first is wrong and Distribution Redux is losing production.")
+    if #groups >= 2 then
+        out("HOW TO READ IT: if DECLARED RATIO scores HIGHER than '100%% <top group>',")
+        out("filling best-first is wrong and Distribution Redux is losing production.")
+    else
+        out("Single group: nothing to conclude from this barn (see the note above).")
+    end
     out("=====================================================================")
+end
+
+---With no name fragment, probe ONE barn per ANIMAL TYPE.
+-- Probing "the first barn" was the first version and it was a poor default: it
+-- landed on a chicken pasture, which has a single food group and therefore cannot
+-- show the effect at all. One barn per animal type covers every distinct food
+-- model on the farm in a single run, which is what the question actually needs.
+function AnimalFoodProbe.run(fragment, demandArg)
+    local demand = tonumber(demandArg) or DEMAND
+
+    local barns = AnimalFoodProbe.findBarns(fragment)
+    if #barns == 0 then
+        out("no husbandry with a food spec found%s.",
+            (fragment ~= nil and fragment ~= "") and (" matching '" .. tostring(fragment) .. "'") or "")
+        return
+    end
+
+    if fragment ~= nil and fragment ~= "" then
+        out("'%s' matched %d barn(s); probing the first.", tostring(fragment), #barns)
+        AnimalFoodProbe.probeBarn(barns[1], demand)
+        return
+    end
+
+    -- one representative barn per animal type
+    local seen, chosen = {}, {}
+    for _, b in ipairs(barns) do
+        local ati = AnimalFoodProbe.animalTypeIndexOf(b.placeable)
+        local key = ati ~= nil and ati or ("?" .. b.name)
+        if seen[key] == nil then
+            seen[key] = true
+            chosen[#chosen + 1] = b
+        end
+    end
+
+    out("%d barn(s) on the farm, %d distinct animal type(s). Probing one of each.",
+        #barns, #chosen)
+    for _, b in ipairs(chosen) do
+        AnimalFoodProbe.probeBarn(b, demand)
+    end
+    out("all animal types probed. The MULTI-GROUP ones are the ones that answer the question.")
 end
 
 -- ---------------------------------------------------------------------------
