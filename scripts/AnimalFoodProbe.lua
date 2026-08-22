@@ -586,6 +586,145 @@ function AnimalFoodProbe:consoleCommandMenu()
     return "arMenuProbe done -- see log.txt"
 end
 
+-- ============================================================================
+-- arAvailFood -- what does getAvailableFood() actually return?
+--
+-- THE QUESTION. A husbandry's food is read here from
+-- spec_husbandryFood.fillLevels, which is the TROUGH. But
+-- PlaceableHusbandryMeadow overrides getAvailableFood / removeFood /
+-- getFoodInfos, so a grazing barn has food that never appears there: a cow barn
+-- was seen reading every group at 0 L while the engine scored it 0.40, the Grass
+-- tier, from the pasture.
+--
+-- getAvailableFood is therefore the AUTHORITATIVE source and fillLevels is a
+-- subset of it. Switching to it would fix the grazing blind spot and might stop
+-- DR hauling grass to a barn already eating enough of it.
+--
+-- WHY THIS IS A SHAPE PROBE AND NOT A FIX. Both implementations are STRIPPED from
+-- the shipped SDK source -- registered in PlaceableHusbandryFood, overridden in
+-- PlaceableHusbandryMeadow, readable in neither -- so the return shape is
+-- unknown. Guessing at stripped internals is what cost three rounds on the menu
+-- tab (CLAUDE.md 2.4), so this reports what comes back rather than assuming a
+-- ft -> litres map.
+--
+-- It tries the no-argument form and a per-fill-type form, prints the type and
+-- structure of whatever returns, and DIFFS it against fillLevels -- because the
+-- difference IS the grazing contribution, which is the number we actually want.
+--
+-- Usage: arAvailFood [name fragment]
+-- ============================================================================
+local function describe(v, depth)
+    depth = depth or 0
+    local t = type(v)
+    if t ~= "table" then return t .. "(" .. tostring(v) .. ")" end
+    if depth > 1 then return "table{...}" end
+    local n, sample = 0, {}
+    for k, val in pairs(v) do
+        n = n + 1
+        if n <= 4 then
+            sample[#sample + 1] = string.format("[%s(%s)]=%s",
+                tostring(k), type(k), describe(val, depth + 1))
+        end
+    end
+    return string.format("table{%d entr%s: %s}", n, n == 1 and "y" or "ies",
+        table.concat(sample, ", "))
+end
+
+function AnimalFoodProbe.runAvailFood(fragment)
+    local ps = g_currentMission ~= nil and g_currentMission.placeableSystem or nil
+    if ps == nil then out("no placeableSystem"); return end
+
+    local seen, n = {}, 0
+    for _, p in ipairs(ps.placeables) do
+        local spec = p.spec_husbandryFood
+        if spec ~= nil then
+            local name = "?"
+            local okN, nm = pcall(function() return p:getName() end)
+            if okN and nm ~= nil then name = tostring(nm) end
+            local matches = fragment == nil or fragment == ""
+                or string.find(string.lower(name), string.lower(fragment), 1, true) ~= nil
+            local ati = AnimalFeedModel ~= nil and AnimalFeedModel.animalTypeIndexOf(p) or nil
+            local key = ati or name
+
+            if matches and seen[key] == nil then
+                seen[key] = true
+                n = n + 1
+                out("=================================================================")
+                out("%s   grazes=%s   getAvailableFood=%s",
+                    name, tostring(p.spec_husbandryMeadow ~= nil), type(p.getAvailableFood))
+
+                -- what the TROUGH says
+                local troughTotal, troughParts = 0, {}
+                for ft, lvl in pairs(spec.fillLevels or {}) do
+                    if (lvl or 0) > 0 then
+                        troughTotal = troughTotal + lvl
+                        troughParts[#troughParts + 1] = string.format("%s %.1f", ftName(ft), lvl)
+                    end
+                end
+                table.sort(troughParts)
+                out("  fillLevels      total %.1f L : %s", troughTotal,
+                    #troughParts > 0 and table.concat(troughParts, ", ") or "(empty)")
+
+                if p.getAvailableFood ~= nil then
+                    -- no-argument form
+                    local ok, a, b = pcall(p.getAvailableFood, p)
+                    if ok then
+                        out("  getAvailableFood()      -> %s", describe(a))
+                        if b ~= nil then out("      second return         -> %s", describe(b)) end
+                        -- If it IS a ft -> litres map, the DIFF against the trough is
+                        -- exactly what grazing supplies. Printed either way; a wrong
+                        -- guess just prints nothing useful rather than misleading.
+                        if type(a) == "table" then
+                            local diffs = {}
+                            for k, v in pairs(a) do
+                                if type(k) == "number" and type(v) == "number" then
+                                    local d = v - (spec.fillLevels[k] or 0)
+                                    if math.abs(d) > 0.01 then
+                                        diffs[#diffs + 1] = string.format("%s %+.1f", ftName(k), d)
+                                    end
+                                end
+                            end
+                            table.sort(diffs)
+                            out("      minus fillLevels      -> %s",
+                                #diffs > 0 and table.concat(diffs, ", ")
+                                or "(identical, so nothing is being grazed right now)")
+                        end
+                    else
+                        out("  getAvailableFood()      -> THREW: %s", tostring(a))
+                    end
+
+                    -- per-fill-type form, in case it takes one
+                    local probeFt = nil
+                    for ft in pairs(spec.supportedFillTypes or {}) do probeFt = ft; break end
+                    if probeFt ~= nil then
+                        local ok2, r2 = pcall(p.getAvailableFood, p, probeFt)
+                        out("  getAvailableFood(%s) -> %s", ftName(probeFt),
+                            ok2 and describe(r2) or ("THREW: " .. tostring(r2)))
+                    end
+                end
+
+                -- getFoodInfos is the other meadow override and is what the base
+                -- game's own UI reads, so it may already carry the merged picture.
+                if p.getFoodInfos ~= nil then
+                    local ok3, infos = pcall(p.getFoodInfos, p)
+                    out("  getFoodInfos()          -> %s", ok3 and describe(infos)
+                        or ("THREW: " .. tostring(infos)))
+                end
+            end
+        end
+    end
+    out("=================================================================")
+    out("%d husbandr%s reported. Compare a GRAZING barn against a non-grazing one:",
+        n, n == 1 and "y" or "ies")
+    out("the difference between them is what the meadow contributes.")
+end
+
+function AnimalFoodProbe:consoleCommandAvail(fragment)
+    local ok, err = pcall(AnimalFoodProbe.runAvailFood, fragment)
+    if not ok then return "arAvailFood failed: " .. tostring(err) end
+    return "arAvailFood done -- see log.txt"
+end
+
 -- ---------------------------------------------------------------------------
 function AnimalFoodProbe.register()
     if addConsoleCommand == nil then return false end
@@ -596,6 +735,8 @@ function AnimalFoodProbe.register()
         "consoleCommandPartial", AnimalFoodProbe)
     addConsoleCommand("arMenuProbe", "Dump how DR's menu places its pages",
         "consoleCommandMenu", AnimalFoodProbe)
+    addConsoleCommand("arAvailFood", "What does getAvailableFood() actually return?",
+        "consoleCommandAvail", AnimalFoodProbe)
     AnimalFoodProbe._registered = true
     return true
 end
