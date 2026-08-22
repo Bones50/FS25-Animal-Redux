@@ -194,6 +194,57 @@ function AnimalFeedModel.plannedFill(model, litres)
     return out
 end
 
+---The plan, restricted to fill types Distribution Redux will actually accept.
+--
+-- DR hands the planner a narrower list than the building supports: blocked
+-- products, globally excluded types and water are already gone. Planning against
+-- the wider set would name a product DR then drops, and that group would end up
+-- with NOTHING -- costing its whole production weight for no visible reason. So
+-- representatives are chosen from `allowed` only.
+--
+-- A group with no allowed member cannot be filled at all, and its weight is lost
+-- whatever we do. The pool is therefore RENORMALISED across the groups that CAN
+-- be filled, rather than reserving space for one that can never arrive: the
+-- factor is capped either way, but this at least keeps the trough full and the
+-- remaining groups running for as long as possible.
+function AnimalFeedModel.planWithin(model, litres, allowed)
+    local out = {}
+    if model == nil or litres == nil or litres <= 0 or allowed == nil then return out end
+
+    local ok = {}
+    for _, ft in ipairs(allowed) do ok[ft] = true end
+
+    -- pick each group's representative from the ALLOWED set
+    local usable, sum = {}, 0
+    for _, g in ipairs(model.groups) do
+        local rep = nil
+        for _, ft in ipairs(g.fts) do
+            if ok[ft] then rep = ft; break end
+        end
+        if rep ~= nil then
+            usable[#usable + 1] = { rep = rep, eat = g.eat, production = g.production }
+            sum = sum + g.eat
+        end
+    end
+    if #usable == 0 then return out end
+
+    if model.consumptionType == "SERIAL" then
+        -- groups are sorted by production DESC, and usable preserves that order
+        local best = usable[1]
+        for _, u in ipairs(usable) do
+            if u.production > best.production then best = u end
+        end
+        out[best.rep] = litres
+        return out
+    end
+
+    if sum <= 0 then return out end
+    for _, u in ipairs(usable) do
+        out[u.rep] = litres * u.eat / sum
+    end
+    return out
+end
+
 -- ---------------------------------------------------------------------------
 ---Ask the ENGINE what a trough scores, rather than trusting the model.
 --

@@ -161,6 +161,41 @@ function AnimalRedux.checkApiVersion(SD)
 end
 
 -- ---------------------------------------------------------------------------
+---The feed planner Distribution Redux calls, once per husbandry per hourly pass.
+--
+-- Contract (DR API v1): return { [fillTypeIndex] = litres } to take over this
+-- building's food pool for this pass, or NIL to decline and leave DR's own
+-- best-quality-first logic in place.
+--
+-- IT MUST BE CHEAP AND IT MUST NOT THROW. DR pcalls it and strikes out a planner
+-- that throws three times, which would silently hand every husbandry on the farm
+-- back to DR for the rest of the session -- so anything unexpected DECLINES
+-- rather than errors.
+--
+-- DECLINING IS THE SAFE ANSWER and is used wherever the model cannot speak with
+-- authority: no food data, an animal type we could not read, or no group with a
+-- product DR is willing to deliver. DR's own behaviour is correct for SERIAL
+-- animals anyway, so a decline is never a regression.
+function AnimalRedux.feedPlanner(placeable, allowedFillTypes, poolNeed)
+    if AnimalFeedModel == nil or placeable == nil then return nil end
+    local spec = placeable.spec_husbandryFood
+    if spec == nil then return nil end
+
+    local ati = AnimalFeedModel.animalTypeIndexOf(placeable)
+    if ati == nil then return nil end
+
+    -- Read LIVE every pass, never cached: Animalic (or a map) can replace the
+    -- whole food definition, and caching would pin us to whatever was loaded
+    -- first. The read is a couple of table walks over a handful of groups.
+    local model = AnimalFeedModel.read(ati, spec.supportedFillTypes)
+    if model == nil then return nil end
+
+    local plan = AnimalFeedModel.planWithin(model, poolNeed, allowedFillTypes)
+    if next(plan) == nil then return nil end
+    return plan
+end
+
+-- ---------------------------------------------------------------------------
 function AnimalRedux.onMissionLoaded()
     local SD, whereOrWhy = AnimalRedux.resolveDistributionRedux()
 
@@ -215,6 +250,24 @@ function AnimalRedux.onMissionLoaded()
         if okF and registered then
             AnimalRedux.warn("dev probe available: arFeedPlan [name fragment]")
         end
+    end
+
+    -- ---- FEED PLANNING -----------------------------------------------------
+    -- Registered only when DR publishes an API we understand. Without it the mod
+    -- still loads and the probes still work; DR simply keeps its own feed logic.
+    if apiOk and SD.API ~= nil and SD.API.registerFeedPlanner ~= nil then
+        local okR = pcall(SD.API.registerFeedPlanner, AnimalRedux.MOD_NAME, AnimalRedux.feedPlanner)
+        AnimalRedux.feedPlanningActive = okR and true or false
+        if okR then
+            AnimalRedux.warn("feed planning ACTIVE (Distribution Redux API v%d)", apiVersion)
+        else
+            AnimalRedux.warn("feed planner could not be registered; DR keeps its own feed logic")
+        end
+    else
+        AnimalRedux.feedPlanningActive = false
+        AnimalRedux.warn("Distribution Redux exposes no feed API (needs v%d+, found v%d) -- "
+            .. "feed planning is INACTIVE and DR keeps its own logic",
+            AnimalRedux.DR_MIN_API, apiVersion)
     end
 
     -- Features attach from here. Nothing yet -- this build only proves the link.
