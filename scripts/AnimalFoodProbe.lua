@@ -710,6 +710,31 @@ function AnimalFoodProbe.runAvailFood(fragment)
                     out("  getFoodInfos()          -> %s", ok3 and describe(infos)
                         or ("THREW: " .. tostring(infos)))
                 end
+
+                -- The condition panel's data source. Six specs contribute, and a
+                -- modded husbandry may add its own entries, so the shape is worth
+                -- seeing rather than assuming.
+                if p.getConditionInfos ~= nil then
+                    local ok4, conds = pcall(p.getConditionInfos, p)
+                    if ok4 and type(conds) == "table" then
+                        out("  getConditionInfos()     -> %d entr%s", #conds,
+                            #conds == 1 and "y" or "ies")
+                        for i, c in ipairs(conds) do
+                            out("      [%d] %s", i, describe(c))
+                        end
+                    else
+                        out("  getConditionInfos()     -> %s",
+                            ok4 and describe(conds) or ("THREW: " .. tostring(conds)))
+                    end
+                end
+                if p.getGlobalProductionFactor ~= nil and p.getProductionFactor ~= nil then
+                    local okG, gf = pcall(p.getGlobalProductionFactor, p)
+                    local okP, pf = pcall(p.getProductionFactor, p)
+                    out("  productionFactor=%s  globalProductionFactor=%s  productivity=%s",
+                        okP and tostring(pf) or "?", okG and tostring(gf) or "?",
+                        (okG and okP and type(gf) == "number" and type(pf) == "number")
+                            and string.format("%.4f", gf * pf) or "?")
+                end
             end
         end
     end

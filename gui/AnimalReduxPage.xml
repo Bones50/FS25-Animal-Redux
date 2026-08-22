@@ -28,20 +28,24 @@
 
         <!-- LEFT: the husbandries -->
         <Bitmap profile="SDList" position="0px -46px" size="370px 40px">
-            <Text profile="SDHeaderLeft" position="16px 0px"  size="230px 40px" textSize="11px"
+            <Text profile="SDHeaderLeft"  position="16px 0px"  size="170px 40px" textSize="11px"
                   text="$l10n_ar_col_barn"/>
-            <Text profile="SDHeaderLeft" position="254px 0px" size="100px 40px" textSize="11px"
-                  text="$l10n_ar_col_factor"/>
+            <Text profile="SDHeaderRight" position="194px 0px" size="70px 40px"  textSize="11px"
+                  text="$l10n_ar_col_animals"/>
+            <Text profile="SDHeaderRight" position="272px 0px" size="70px 40px"  textSize="11px"
+                  text="$l10n_ar_col_productivity"/>
             <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
         </Bitmap>
         <SmoothList profile="SDList" id="barnList" position="0px -90px" size="370px 720px"
                     onSelectionChanged="onListSelectionChanged"
                     focusChangeTop="nil" focusChangeBottom="nil">
             <ListItem profile="SDListItem" name="rowTemplate" size="370px 52px">
-                <Text profile="SDRowCell"  position="16px 0px"  size="230px 52px" textSize="15px"
+                <Text profile="SDRowCell"  position="16px 0px"  size="170px 52px" textSize="14px"
                       name="barnName"/>
-                <Text profile="SDRowCellR" position="254px 0px" size="100px 52px" textSize="15px"
-                      name="barnFactor"/>
+                <Text profile="SDRowCellR" position="194px 0px" size="70px 52px"  textSize="14px"
+                      name="barnAnimals"/>
+                <Text profile="SDRowCellR" position="272px 0px" size="70px 52px"  textSize="14px"
+                      name="barnProd"/>
             </ListItem>
         </SmoothList>
 
@@ -69,7 +73,7 @@
                   text="$l10n_ar_col_accepts"/>
             <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
         </Bitmap>
-        <SmoothList profile="SDList" id="groupList" position="390px -136px" size="1090px 674px"
+        <SmoothList profile="SDList" id="groupList" position="390px -136px" size="1090px 336px"
                     focusChangeTop="nil" focusChangeBottom="nil">
             <ListItem profile="SDListItemStats" name="rowTemplate" size="1090px 42px">
                 <Text profile="SDRowCell"  position="16px 0px"  size="190px 42px" textSize="12px"
@@ -86,6 +90,33 @@
                       name="groupMax"/>
                 <Text profile="SDRowCell"  position="744px 0px" size="330px 42px" textSize="12px"
                       name="groupAccepts"/>
+            </ListItem>
+        </SmoothList>
+
+        <!-- RIGHT, lower: the BASE GAME's own condition list, straight from
+             getConditionInfos(). Six husbandry specs contribute to it (animals,
+             water, straw, milk, slurry, pallets), so this picks up water, bedding
+             and a backed-up output store without this mod knowing anything about
+             them, and a modded husbandry's own entries come along for free.
+             16 + 320 = 336 | 344 + 150 = 494 | 502 + 110 = 612 -->
+        <Bitmap profile="SDList" position="390px -476px" size="1090px 40px">
+            <Text profile="SDHeaderLeft"  position="16px 0px"  size="320px 40px" textSize="11px"
+                  text="$l10n_ar_col_condition"/>
+            <Text profile="SDHeaderRight" position="344px 0px" size="150px 40px" textSize="11px"
+                  text="$l10n_ar_col_level"/>
+            <Text profile="SDHeaderRight" position="502px 0px" size="110px 40px" textSize="11px"
+                  text="$l10n_ar_col_ofCapacity"/>
+            <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <SmoothList profile="SDList" id="conditionList" position="390px -520px" size="1090px 290px"
+                    focusChangeTop="nil" focusChangeBottom="nil">
+            <ListItem profile="SDListItemStats" name="rowTemplate" size="1090px 42px">
+                <Text profile="SDRowCell"  position="16px 0px"  size="320px 42px" textSize="12px"
+                      name="condName"/>
+                <Text profile="SDRowCellR" position="344px 0px" size="150px 42px" textSize="12px"
+                      name="condValue"/>
+                <Text profile="SDRowCellR" position="502px 0px" size="110px 42px" textSize="12px"
+                      name="condRatio"/>
             </ListItem>
         </SmoothList>
     </GuiElement>

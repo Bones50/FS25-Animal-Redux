@@ -135,6 +135,70 @@ local function readBarn(p)
         end
     end
 
+    -- ---- PRODUCTIVITY, the base game's own headline -------------------------
+    -- productivity = globalProductionFactor x productionFactor, exactly as
+    -- PlaceableHusbandryAnimals:getConditionInfos computes it. This is NOT the
+    -- food factor: food is one input to it, so a barn can be perfectly fed and
+    -- still be at 60% for a reason nothing else on this tab would show.
+    --
+    -- The base game HIDES this for horses and pigs (they do not produce
+    -- continuously), so it is flagged rather than silently presented as
+    -- meaningful for them.
+    local prod = nil
+    if p.getGlobalProductionFactor ~= nil and p.getProductionFactor ~= nil then
+        local okG, gf = pcall(p.getGlobalProductionFactor, p)
+        local okP, pf = pcall(p.getProductionFactor, p)
+        if okG and okP and type(gf) == "number" and type(pf) == "number" then
+            prod = gf * pf
+        end
+    end
+    local prodApplies = true
+    if AnimalType ~= nil and ati ~= nil then
+        prodApplies = (ati ~= AnimalType.HORSE and ati ~= AnimalType.PIG)
+    end
+
+    -- ---- HERD: how many, and how healthy ------------------------------------
+    local numAnimals, maxAnimals, health = nil, nil, nil
+    if p.getNumOfAnimals ~= nil then
+        local okN, v = pcall(p.getNumOfAnimals, p); if okN then numAnimals = v end
+    end
+    if p.getMaxNumOfAnimals ~= nil then
+        local okM, v = pcall(p.getMaxNumOfAnimals, p); if okM then maxAnimals = v end
+    end
+    if p.getClusters ~= nil then
+        local okC, clusters = pcall(p.getClusters, p)
+        if okC and type(clusters) == "table" and #clusters > 0 then
+            -- averaged per CLUSTER, which is how the base game's info box does it
+            local sum = 0
+            for _, c in ipairs(clusters) do sum = sum + (c.health or 0) end
+            health = sum / #clusters
+        end
+    end
+
+    -- ---- THE GAME'S OWN CONDITION LIST --------------------------------------
+    -- One call gives water, bedding, output stores and productivity, already
+    -- titled and normalised, from six specs at once. Rendered generically, so an
+    -- entry this mod has never heard of (a modded husbandry's own) still shows.
+    local conditions = {}
+    if p.getConditionInfos ~= nil then
+        local okI, infos = pcall(p.getConditionInfos, p)
+        if okI and type(infos) == "table" then
+            for _, i in ipairs(infos) do
+                if type(i) == "table" then
+                    conditions[#conditions + 1] = {
+                        title = tostring(i.title or "?"),
+                        value = tonumber(i.value),
+                        valueText = i.valueText,
+                        ratio = tonumber(i.ratio),
+                        -- invertedBar means a HIGH reading is the bad one, which is
+                        -- how a backing-up output store is expressed
+                        inverted = i.invertedBar == true,
+                    }
+                end
+            end
+        end
+    end
+
     local SD = AnimalRedux ~= nil and AnimalRedux.DR or nil
     local uid = (SD ~= nil and SD.assetUid ~= nil) and SD.assetUid(p) or tostring(p)
 
@@ -149,7 +213,9 @@ local function readBarn(p)
 
     return { placeable = p, uid = uid, name = name, model = model, demand = demand,
              hasAnimals = hasAnimals, held = held, delivered = delivered,
-             engine = engine, modelF = modelF, grazes = grazes, groups = groups }
+             engine = engine, modelF = modelF, grazes = grazes, groups = groups,
+             prod = prod, prodApplies = prodApplies, numAnimals = numAnimals,
+             maxAnimals = maxAnimals, health = health, conditions = conditions }
 end
 
 function AnimalReduxPage:rebuild()
@@ -223,6 +289,7 @@ function AnimalReduxPage:rebuild()
     local sel = self.barns[self.selectedBarn]
     self.selectedUid = sel ~= nil and sel.uid or nil
     self.rows = (sel or {}).groups or {}
+    self.conds = (sel or {}).conditions or {}
 end
 
 ---Called by DR's paced refresh for pages that CACHE their figures -- which this
@@ -261,6 +328,21 @@ function AnimalReduxPage:updateSummary()
         b.engine or 0, b.modelF or 0,
         (b.engine ~= nil and b.modelF ~= nil and math.abs(b.engine - b.modelF) > 0.02)
             and l10n("ar_sum_disagree", "   <<< MODEL DISAGREES") or "")
+        -- Appended rather than folded into the format string: each part is
+        -- conditional, and a format with six optional slots is unreadable in a
+        -- translation file.
+        .. ((b.numAnimals ~= nil and b.maxAnimals ~= nil)
+            and string.format(l10n("ar_sum_herd", "   -  %d/%d animals"),
+                              b.numAnimals, b.maxAnimals) or "")
+        .. ((b.health ~= nil)
+            and string.format(l10n("ar_sum_health", " at %d%% health"),
+                              math.floor(b.health * 100 + 0.5)) or "")
+        -- PRODUCTIVITY is the base game's own headline and is NOT the food factor
+        -- printed above it. Both are shown so "fed perfectly but only 60%
+        -- productive" is visible as the distinct situation it is.
+        .. ((b.prod ~= nil and b.prodApplies)
+            and string.format(l10n("ar_sum_prod", "   -  PRODUCTIVITY %d%%"),
+                              math.floor(b.prod * 100 + 0.5)) or "")
         .. (b.grazes and l10n("ar_sum_grazes",
             "   -  GRAZES A MEADOW: pasture grass feeds these animals without appearing in the trough")
             or ""))
@@ -271,7 +353,7 @@ end
 -- ---------------------------------------------------------------------------
 function AnimalReduxPage:onGuiSetupFinished()
     AnimalReduxPage:superClass().onGuiSetupFinished(self)
-    for _, id in ipairs({ "barnList", "groupList" }) do
+    for _, id in ipairs({ "barnList", "groupList", "conditionList" }) do
         local list = self[id]
         if list ~= nil then
             list:setDataSource(self)
@@ -284,16 +366,18 @@ function AnimalReduxPage:onFrameOpen()
     AnimalReduxPage:superClass().onFrameOpen(self)
     -- DR's base page re-populates these on its own paced tick, so the figures
     -- stay live without this page running a timer of its own.
-    self._realtimeLists = { "barnList", "groupList" }
+    self._realtimeLists = { "barnList", "groupList", "conditionList" }
     self:rebuild()
     if self.barnList ~= nil then self.barnList:reloadData() end
     if self.groupList ~= nil then self.groupList:reloadData() end
+    if self.conditionList ~= nil then self.conditionList:reloadData() end
     self:updateSummary()
 end
 
 -- ---- SmoothList delegate (two lists, told apart by identity) ---------------
 function AnimalReduxPage:getNumberOfItemsInSection(list, section)
     if list == self.barnList then return #(self.barns or {}) end
+    if list == self.conditionList then return #(self.conds or {}) end
     return #(self.rows or {})
 end
 
@@ -303,14 +387,56 @@ function AnimalReduxPage:populateCellForItemInSection(list, section, index, cell
         if b == nil then return end
         local nameCell = cell:getAttribute("barnName")
         if nameCell ~= nil then nameCell:setText(b.name) end
-        local fCell = cell:getAttribute("barnFactor")
-        if fCell ~= nil then
-            if not b.hasAnimals then
-                fCell:setText("-")
-                setColour(fCell, 1)
+        local aCell = cell:getAttribute("barnAnimals")
+        if aCell ~= nil then
+            if b.numAnimals ~= nil and b.maxAnimals ~= nil then
+                aCell:setText(string.format("%d/%d", b.numAnimals, b.maxAnimals))
+                -- a FULL barn is not a fault, so it is never red; empty is just empty
+                setColour(aCell, 1)
             else
-                fCell:setText(string.format("%.2f", b.engine or 0))
-                setColour(fCell, b.engine or 0)
+                aCell:setText("-")
+                setColour(aCell, 1)
+            end
+        end
+        local pCell = cell:getAttribute("barnProd")
+        if pCell ~= nil then
+            if not b.hasAnimals or b.prod == nil then
+                pCell:setText("-")
+                setColour(pCell, 1)
+            elseif not b.prodApplies then
+                -- the base game does not use productivity for horses or pigs, so
+                -- showing a bare number here would invite chasing a figure that
+                -- drives nothing
+                pCell:setText("n/a")
+                setColour(pCell, 1)
+            else
+                pCell:setText(string.format("%.0f%%", b.prod * 100))
+                setColour(pCell, b.prod)
+            end
+        end
+        return
+    end
+
+    if list == self.conditionList then
+        local c = (self.conds or {})[index]
+        if c == nil then return end
+        local nCell = cell:getAttribute("condName")
+        if nCell ~= nil then nCell:setText(c.title) end
+        local vCell = cell:getAttribute("condValue")
+        if vCell ~= nil then
+            vCell:setText(c.valueText or (c.value ~= nil and vol(c.value)) or "-")
+        end
+        local rCell = cell:getAttribute("condRatio")
+        if rCell ~= nil then
+            if c.ratio == nil then
+                rCell:setText("-")
+                setColour(rCell, 1)
+            else
+                rCell:setText(string.format("%.0f%%", c.ratio * 100))
+                -- invertedBar means HIGH is the bad reading, which is how a
+                -- backing-up output store is expressed. Colour accordingly, or a
+                -- full slurry pit would read as healthy.
+                setColour(rCell, c.inverted and (1 - c.ratio) or c.ratio)
             end
         end
         return
@@ -340,7 +466,9 @@ function AnimalReduxPage:onListSelectionChanged(list, section, index)
     self.selectedUid = b ~= nil and b.uid or nil    -- remembered by IDENTITY, so a refresh
                                                     -- cannot slide another barn underneath it
     self.rows = (b or {}).groups or {}
+    self.conds = (b or {}).conditions or {}
     if self.groupList ~= nil then self.groupList:reloadData() end
+    if self.conditionList ~= nil then self.conditionList:reloadData() end
     self:updateSummary()
 end
 
