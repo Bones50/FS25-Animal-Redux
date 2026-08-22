@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!-- descVersion 111, matching Distribution Redux. This mod uses only launch-era
+     schema, so a lower value also loads; 111 matches the current patch and
+     silences the version notice. -->
+<modDesc descVersion="111">
+    <author>Bones</author>
+    <version>0.0.0.1</version>
+
+    <title>
+        <en>Animal Redux</en>
+    </title>
+    <description>
+        <en><![CDATA[
+Animal Redux
+
+An extension to Distribution Redux that deepens Farming Simulator 25's animal husbandry.
+
+REQUIRES Distribution Redux. This mod will not run without it.
+
+Feedback/Issues: https://github.com/Bones50/FS25-Animal-Redux
+        ]]></en>
+    </description>
+
+    <iconFilename>icon_AnimalRedux.dds</iconFilename>
+    <multiplayer supported="true"/>
+
+    <extraSourceFiles>
+        <sourceFile filename="scripts/AnimalRedux.lua"/>
+    </extraSourceFiles>
+
+    <!-- HARD DEPENDENCY. The game warns the player when this is missing; the mod
+         ALSO guards in code (AnimalRedux.resolveDistributionRedux), because the
+         dependency element is not documented in the SDK and whether it hard-blocks
+         loading or merely warns has not been confirmed in game. Belt and braces. -->
+    <dependencies>
+        <dependency>FS25_Distribution_Redux</dependency>
+    </dependencies>
+
+    <l10n filenamePrefix="translations/translation"/>
+</modDesc>

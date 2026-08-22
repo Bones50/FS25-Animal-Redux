@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!-- Animal Redux, English.
+
+     An external translation file is ALREADY language specific, so entries carry
+     no <en> sub element. That form belongs only inside modDesc.
+
+     To add a language, copy this file to translation_<code>.xml and translate the
+     text attributes. Partial translations are safe: any key missing here falls
+     back to the literal shipped in the Lua.
+
+     NOTE an XML comment may not contain a double hyphen anywhere. It is a parse
+     error and the whole file silently fails to load. -->
+<l10n>
+    <texts>
+        <text name="ar_modTitle" text="Animal Redux"/>
+    </texts>
+</l10n>
