@@ -144,28 +144,59 @@ function AnimalFeedModel.groupPresent(group, trough)
     return false
 end
 
----The production factor a given trough would earn. Mirrors the measured rule.
--- Used for REPORTING and for offline reasoning; the authoritative answer always
--- comes from the engine (see measureFactor).
-function AnimalFeedModel.factorOf(model, trough)
+---The production factor a given trough would earn. The authoritative answer always
+-- comes from the engine (measureFactor); this is for reporting and offline reasoning.
+--
+-- THE FACTOR IS QUANTITY-SENSITIVE, not merely presence-based, and that was a
+-- late and expensive correction. Measured on a horse barn: adding ONE litre of
+-- carrot against a 4.8 L/h need moved the factor by +0.0129, not by carrot's full
+-- +0.0476 weight. A group contributes in proportion to how much of its hourly
+-- need is stocked:
+--
+--     factor = SUM over groups of  production x min(1, held / (demand x eatShare))
+--
+-- Every earlier measurement had each group stocked far past its need, so the
+-- min() term was always 1 and the simpler "sum of the weights of the groups
+-- present" looked right. It is the fully-stocked special case.
+--
+-- `demand` is OPTIONAL. Omit it for the fully-stocked question ("if every group
+-- were adequately stocked, what would this score?"), which is what the plan is
+-- built to achieve and what the offline harness reasons about. Pass the barn's
+-- real litersPerHour to ask what a PARTICULAR trough scores right now.
+--
+-- APPROXIMATE while quantity-limited: it reproduced 0.5355 against a measured
+-- 0.5417, so the real curve is not quite linear. arFeedPartial maps it properly.
+function AnimalFeedModel.factorOf(model, trough, demand)
     local total = 0
     for _, litres in pairs(trough) do total = total + (litres or 0) end
     if total <= 0 then return 0 end
 
+    -- how much of each group is present, as a fraction of what it needs
+    local eatSum = 0
+    if demand ~= nil and demand > 0 then
+        for _, g in ipairs(model.groups) do eatSum = eatSum + g.eat end
+    end
+    local function served(g)
+        local held = 0
+        for _, ft in ipairs(g.fts) do held = held + (trough[ft] or 0) end
+        if held <= 0 then return 0 end
+        if demand == nil or demand <= 0 or eatSum <= 0 then return 1 end
+        local need = demand * g.eat / eatSum
+        if need <= 0 then return 1 end
+        return math.min(1, held / need)
+    end
+
     if model.consumptionType == "SERIAL" then
         local best = 0
         for _, g in ipairs(model.groups) do
-            if AnimalFeedModel.groupPresent(g, trough) and g.production > best then
-                best = g.production
-            end
+            local f = g.production * served(g)
+            if f > best then best = f end
         end
         return best
     end
 
     local sum = 0
-    for _, g in ipairs(model.groups) do
-        if AnimalFeedModel.groupPresent(g, trough) then sum = sum + g.production end
-    end
+    for _, g in ipairs(model.groups) do sum = sum + g.production * served(g) end
     return math.min(1.0, sum)
 end
 
@@ -207,6 +238,23 @@ end
 -- be filled, rather than reserving space for one that can never arrive: the
 -- factor is capped either way, but this at least keeps the trough full and the
 -- remaining groups running for as long as possible.
+-- EVERY allowed member of a group is offered, not just the first one.
+--
+-- This was the bug that made a pigsty sit at 0.30 while its silos held sorghum
+-- and canola: the plan named one REPRESENTATIVE per group, chosen from the
+-- ALLOWED list -- which only means "the barn accepts it and the player has not
+-- blocked it", and says nothing about whether the farm holds a single litre. With
+-- no maize and no soybean, two groups were planned against products that did not
+-- exist while their alternates were never asked for.
+--
+-- A planner cannot see the farm's stock. DR can, at slot-build time, and DR's own
+-- feed logic was always stock-aware. So the plan states the GROUP's need and
+-- lists every member that could satisfy it; DR gathers candidates across all of
+-- them and draws from whatever is actually there, nearest first. Within a group
+-- the members are interchangeable for the production factor (measured: SORGHUM
+-- scores exactly as MAIZE), so this cannot cost anything.
+--
+-- Returns the API v2 array form:  { { fillTypes = {...}, litres = n }, ... }
 function AnimalFeedModel.planWithin(model, litres, allowed)
     local out = {}
     if model == nil or litres == nil or litres <= 0 or allowed == nil then return out end
@@ -214,35 +262,45 @@ function AnimalFeedModel.planWithin(model, litres, allowed)
     local ok = {}
     for _, ft in ipairs(allowed) do ok[ft] = true end
 
-    -- pick each group's representative from the ALLOWED set
     local usable, sum = {}, 0
     for _, g in ipairs(model.groups) do
-        local rep = nil
+        local members = {}
         for _, ft in ipairs(g.fts) do
-            if ok[ft] then rep = ft; break end
+            if ok[ft] then members[#members + 1] = ft end
         end
-        if rep ~= nil then
-            usable[#usable + 1] = { rep = rep, eat = g.eat, production = g.production }
+        if #members > 0 then
+            usable[#usable + 1] = { members = members, eat = g.eat, production = g.production }
             sum = sum + g.eat
         end
     end
     if #usable == 0 then return out end
 
     if model.consumptionType == "SERIAL" then
-        -- groups are sorted by production DESC, and usable preserves that order
         local best = usable[1]
         for _, u in ipairs(usable) do
             if u.production > best.production then best = u end
         end
-        out[best.rep] = litres
+        out[1] = { fillTypes = best.members, litres = litres }
         return out
     end
 
     if sum <= 0 then return out end
     for _, u in ipairs(usable) do
-        out[u.rep] = litres * u.eat / sum
+        out[#out + 1] = { fillTypes = u.members, litres = litres * u.eat / sum }
     end
     return out
+end
+
+---One concrete fill type per entry, for measuring or displaying a plan.
+-- Members of a group are interchangeable for the factor, so the first is
+-- representative; what DR actually delivers depends on stock.
+function AnimalFeedModel.entriesToMix(entries)
+    local mix = {}
+    for _, e in ipairs(entries or {}) do
+        local ft = e.fillTypes ~= nil and e.fillTypes[1] or nil
+        if ft ~= nil then mix[ft] = (mix[ft] or 0) + e.litres end
+    end
+    return mix
 end
 
 -- ---------------------------------------------------------------------------
@@ -387,13 +445,38 @@ function AnimalFeedModel.Console.run(fragment)
 
                     local capacity = spec.capacity or 0
                     local pool = capacity > 0 and capacity or 10000
-                    local demand = math.max(1, math.min(100, pool / 10))
+
+                    -- THE BARN'S REAL DEMAND, not a synthetic one. The first version
+                    -- used min(100, capacity/10), which tested a horse barn at 100 L/h
+                    -- against its real 27 -- roughly four times its appetite. That made
+                    -- a perfectly adequate two-hour buffer read as starved (0.5417 when
+                    -- the truth was ~0.99) and sent us chasing a fault that did not
+                    -- exist. Only fall back when the barn has no animals to feed.
+                    local demand = AnimalFeedModel.demandPerHour(p)
+                    local realDemand = demand > 0
+                    if not realDemand then demand = 100 end
 
                     local nowMix, nowTotal = AnimalFeedModel.troughOf(p)
                     local nowF = select(1, AnimalFeedModel.measureFactor(p, ati, nowMix, demand))
                     out("  CURRENT  %s", mixText(nowMix))
-                    out("           held %.0f L -> engine factor %s", nowTotal,
-                        nowF ~= nil and string.format("%.4f", nowF) or "?")
+                    out("           held %.0f L -> engine factor %s   (at %.2f L/h%s)",
+                        nowTotal, nowF ~= nil and string.format("%.4f", nowF) or "?",
+                        demand, realDemand and "" or ", SYNTHETIC: this barn has no animals")
+
+                    -- CHECK THE MODEL AGAINST THE TROUGH THAT ACTUALLY EXISTS, not only
+                    -- against the plan. The plan is always fully stocked, so it can only
+                    -- ever exercise the easy case -- and the model was wrong about
+                    -- partially-stocked troughs by 44 points while cheerfully printing
+                    -- "MODEL AGREES" above the row that disproved it.
+                    if nowF ~= nil and nowTotal > 0 then
+                        local predNow = AnimalFeedModel.factorOf(model, nowMix, demand)
+                        if math.abs(predNow - nowF) <= 0.02 then
+                            out("           model agrees on the CURRENT trough (predicted %.4f)", predNow)
+                        else
+                            out("           *** model DISAGREES on the CURRENT trough: predicted %.4f, "
+                                .. "engine %.4f ***", predNow, nowF)
+                        end
+                    end
 
                     -- THE COUNTERFACTUAL. Comparing the plan against whatever
                     -- happens to be in the trough is worthless when the trough
@@ -412,14 +495,31 @@ function AnimalFeedModel.Console.run(fragment)
                     out("           over %.0f L -> engine factor %s", pool,
                         drF ~= nil and string.format("%.4f", drF) or "?")
 
-                    local plan = AnimalFeedModel.plannedFill(model, pool)
-                    local planF, _, err = AnimalFeedModel.measureFactor(p, ati, plan, demand)
-                    out("  PLANNED  %s", mixText(plan))
+                    -- The plan as the API actually receives it: one entry per group,
+                    -- listing every member the barn accepts. Shown that way too, since
+                    -- "MAIZE or SORGHUM" is the thing that fixes a stranded group and
+                    -- printing only the first member would hide the whole point.
+                    local allowed = {}
+                    for ft in pairs(spec.supportedFillTypes or {}) do allowed[#allowed + 1] = ft end
+                    local entries = AnimalFeedModel.planWithin(model, pool, allowed)
+
+                    for _, e in ipairs(entries) do
+                        local names = {}
+                        for _, ft in ipairs(e.fillTypes) do names[#names + 1] = ftName(ft) end
+                        out("  PLANNED  %8.0f L of  %s", e.litres, table.concat(names, " or "))
+                    end
+                    if #entries == 0 then out("  PLANNED  (nothing -- planner would decline)") end
+
+                    local planMix = AnimalFeedModel.entriesToMix(entries)
+                    local planF, _, err = AnimalFeedModel.measureFactor(p, ati, planMix, demand)
                     out("           over %.0f L -> engine factor %s", pool,
                         planF ~= nil and string.format("%.4f", planF) or ("ERROR " .. tostring(err)))
 
-                    -- THE CHECK: does the model agree with the engine?
-                    local predicted = AnimalFeedModel.factorOf(model, plan)
+                    -- THE CHECK: does the model agree with the engine? The plan stocks
+                    -- every group past its need, so this is the fully-stocked question
+                    -- and takes no demand argument. The partially-stocked case is
+                    -- checked separately, on the CURRENT trough above.
+                    local predicted = AnimalFeedModel.factorOf(model, planMix)
                     if planF ~= nil then
                         local delta = math.abs(predicted - planF)
                         if delta <= 0.01 then
