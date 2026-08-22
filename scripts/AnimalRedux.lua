@@ -208,6 +208,15 @@ function AnimalRedux.onMissionLoaded()
         end
     end
 
+    -- The feed model's own verifier. Registered separately from the probe so
+    -- either can be removed without disturbing the other.
+    if AnimalFeedModel ~= nil and AnimalFeedModel.Console ~= nil then
+        local okF, registered = pcall(AnimalFeedModel.Console.register)
+        if okF and registered then
+            AnimalRedux.warn("dev probe available: arFeedPlan [name fragment]")
+        end
+    end
+
     -- Features attach from here. Nothing yet -- this build only proves the link.
 end
 
