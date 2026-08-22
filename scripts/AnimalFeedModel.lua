@@ -401,7 +401,48 @@ function AnimalFeedModel.demandPerHour(placeable)
     return lph
 end
 
----Current trough contents as fillType -> litres, plus the total.
+---What the animals can actually EAT, as fillType -> litres, plus the total.
+--
+-- THE AUTHORITATIVE READ, and it is not the trough. `spec_husbandryFood
+-- .fillLevels` is only what has been tipped in; PlaceableHusbandryMeadow
+-- overrides `getAvailableFood` so a grazing barn has food that never appears
+-- there. Measured with arAvailFood: a cow barn holding only DRYGRASS and SILAGE
+-- reported 828 L of GRASS_WINDROW, and a sheep barn holding 283 L of hay reported
+-- 1,197 L of grass. That pasture grass is why a cow with an empty trough still
+-- scored 0.40.
+--
+-- SHAPE, measured rather than guessed (both implementations are stripped):
+--   getAvailableFood()    -> nil    -- the no-argument form does not work
+--   getAvailableFood(ft)  -> number -- litres, trough PLUS meadow
+-- `getFoodInfos()` gives the same picture per GROUP and lists the meadow as its
+-- own pseudo-entry ("Meadow (100%)", `ignoreCapacity = true`), which is the
+-- better source if a group-level total is ever wanted.
+--
+-- Falls back to fillLevels when the method is absent, so nothing depends on it.
+function AnimalFeedModel.availableOf(placeable, fillTypes)
+    local out, total = {}, 0
+    local spec = placeable ~= nil and placeable.spec_husbandryFood or nil
+    if spec == nil then return out, 0 end
+
+    if placeable.getAvailableFood ~= nil and fillTypes ~= nil then
+        for _, ft in ipairs(fillTypes) do
+            if out[ft] == nil then
+                local ok, litres = pcall(placeable.getAvailableFood, placeable, ft)
+                if ok and type(litres) == "number" and litres > 0 then
+                    out[ft] = litres
+                    total = total + litres
+                end
+            end
+        end
+        return out, total
+    end
+
+    return AnimalFeedModel.troughOf(placeable)
+end
+
+---Current TROUGH contents as fillType -> litres, plus the total. This is what has
+-- been delivered, and deliberately EXCLUDES grazing -- use availableOf for what
+-- the animals can actually eat.
 function AnimalFeedModel.troughOf(placeable)
     local out, total = {}, 0
     local spec = placeable ~= nil and placeable.spec_husbandryFood or nil

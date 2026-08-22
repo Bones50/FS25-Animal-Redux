@@ -87,7 +87,18 @@ local function readBarn(p)
     local demand = AnimalFeedModel.demandPerHour(p)
     local hasAnimals = demand > 0
 
-    local trough, held = AnimalFeedModel.troughOf(p)
+    -- WHAT THE ANIMALS CAN EAT, not merely what has been delivered. A grazing barn
+    -- has meadow grass that never reaches the trough (measured: a cow barn holding
+    -- only hay and silage still reported 828 L of grass available), and showing 0
+    -- against an engine factor of 0.40 was the contradiction that exposed it.
+    local everyFt = {}
+    if model ~= nil then
+        for _, g in ipairs(model.groups) do
+            for _, ft in ipairs(g.fts) do everyFt[#everyFt + 1] = ft end
+        end
+    end
+    local trough, held = AnimalFeedModel.availableOf(p, everyFt)
+    local delivered = select(2, AnimalFeedModel.troughOf(p))   -- trough alone, for the summary
     local engine, modelF = nil, nil
     if model ~= nil and hasAnimals then
         engine = select(1, AnimalFeedModel.measureFactor(p, ati, trough, demand))
@@ -137,8 +148,8 @@ local function readBarn(p)
     local grazes = p.spec_husbandryMeadow ~= nil
 
     return { placeable = p, uid = uid, name = name, model = model, demand = demand,
-             hasAnimals = hasAnimals, held = held, engine = engine, modelF = modelF,
-             grazes = grazes, groups = groups }
+             hasAnimals = hasAnimals, held = held, delivered = delivered,
+             engine = engine, modelF = modelF, grazes = grazes, groups = groups }
 end
 
 function AnimalReduxPage:rebuild()
@@ -243,7 +254,10 @@ function AnimalReduxPage:updateSummary()
         l10n("ar_sum_line", "%s  -  %s  -  eats %.1f L/h  -  trough %s  -  ENGINE %.4f  -  model %.4f%s"),
         b.name,
         (b.model ~= nil and b.model.consumptionType or "?"),
-        b.demand, vol(b.held),
+        b.demand,
+        (b.grazes and b.held > b.delivered + 0.5)
+            and string.format("%s (%s delivered + grazing)", vol(b.held), vol(b.delivered))
+            or vol(b.held),
         b.engine or 0, b.modelF or 0,
         (b.engine ~= nil and b.modelF ~= nil and math.abs(b.engine - b.modelF) > 0.02)
             and l10n("ar_sum_disagree", "   <<< MODEL DISAGREES") or "")
