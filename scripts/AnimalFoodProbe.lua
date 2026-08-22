@@ -504,6 +504,79 @@ function AnimalFoodProbe:consoleCommandPartial(fragment)
     return "arFeedPartial done -- see log.txt"
 end
 
+-- ============================================================================
+-- arMenuProbe -- how DR's menu actually places its pages.
+--
+-- PagingElement is ~64% stripped in the shipped source: addPage and
+-- getPageIdByElement are both missing, so the contract for adding a page at
+-- runtime has to be inferred from two readable call sites. Inferring it wrongly
+-- is what broke DR's menu once and mislaid the Animals tab twice.
+--
+-- So: stop reasoning, dump what the game demonstrably does. For every page the
+-- menu holds this prints the geometry the framework gave it, whether the paging
+-- element can resolve it, and how ours compares. A page that renders in the wrong
+-- place differs from a working one in exactly one of these numbers.
+--
+-- Usage: arMenuProbe
+-- ============================================================================
+local function xy(t)
+    if type(t) ~= "table" then return "?" end
+    return string.format("%.4f, %.4f", t[1] or -1, t[2] or -1)
+end
+
+function AnimalFoodProbe.runMenuProbe()
+    local SD = AnimalRedux ~= nil and AnimalRedux.DR or nil
+    local menu = SD ~= nil and SD._menu or nil
+    if menu == nil then out("DR's menu is not registered"); return end
+    local pe = menu.pagingElement
+    out("=================================================================")
+    out("pagingElement: %s", tostring(pe))
+    if pe ~= nil then
+        out("  position %s   size %s", xy(pe.position), xy(pe.size))
+        out("  absPosition %s   absSize %s", xy(pe.absPosition), xy(pe.absSize))
+        out("  #pages=%s  currentPageIndex=%s",
+            tostring(pe.pages ~= nil and #pe.pages or "?"), tostring(pe.currentPageIndex))
+        out("  methods: addPage=%s getPageIdByElement=%s addElement=%s",
+            type(pe.addPage), type(pe.getPageIdByElement), type(pe.addElement))
+    end
+
+    out("--- pageFrames (what TabbedMenu registered) ---")
+    for i, f in ipairs(menu.pageFrames or {}) do
+        local id = nil
+        if pe ~= nil and pe.getPageIdByElement ~= nil then
+            local okI, v = pcall(pe.getPageIdByElement, pe, f); id = okI and v or "ERR"
+        end
+        local root = f.elements ~= nil and f.elements[1] or nil
+        out("  [%d] %s", i, tostring(f.name or f.pageName or f))
+        out("        pos %s  size %s", xy(f.position), xy(f.size))
+        out("        abs %s  absSize %s", xy(f.absPosition), xy(f.absSize))
+        local resolves = "n/a"
+        if pe ~= nil and id ~= nil and id ~= "ERR" and pe.getPageById ~= nil then
+            local okR, entry = pcall(pe.getPageById, pe, id)
+            resolves = tostring(okR and entry ~= nil)
+        end
+        out("        pagingId=%s  resolves=%s  visible=%s",
+            tostring(id), resolves, tostring(f.visible))
+        if root ~= nil then
+            out("        root: pos %s  size %s  abs %s", xy(root.position), xy(root.size),
+                xy(root.absPosition))
+        end
+    end
+
+    out("--- pagingElement.pages (what the paging element knows) ---")
+    for i, pg in ipairs((pe ~= nil and pe.pages) or {}) do
+        out("  [%d] id=%s  title=%s  disabled=%s  element=%s",
+            i, tostring(pg.id), tostring(pg.title), tostring(pg.disabled), tostring(pg.element))
+    end
+    out("=================================================================")
+end
+
+function AnimalFoodProbe:consoleCommandMenu()
+    local ok, err = pcall(AnimalFoodProbe.runMenuProbe)
+    if not ok then return "arMenuProbe failed: " .. tostring(err) end
+    return "arMenuProbe done -- see log.txt"
+end
+
 -- ---------------------------------------------------------------------------
 function AnimalFoodProbe.register()
     if addConsoleCommand == nil then return false end
@@ -512,6 +585,8 @@ function AnimalFoodProbe.register()
         "consoleCommand", AnimalFoodProbe)
     addConsoleCommand("arFeedPartial", "Is the food factor presence-based or quantity-based?",
         "consoleCommandPartial", AnimalFoodProbe)
+    addConsoleCommand("arMenuProbe", "Dump how DR's menu places its pages",
+        "consoleCommandMenu", AnimalFoodProbe)
     AnimalFoodProbe._registered = true
     return true
 end

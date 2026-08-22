@@ -118,7 +118,10 @@ local function readBarn(p)
         end
     end
 
-    return { placeable = p, name = name, model = model, demand = demand,
+    local SD = AnimalRedux ~= nil and AnimalRedux.DR or nil
+    local uid = (SD ~= nil and SD.assetUid ~= nil) and SD.assetUid(p) or tostring(p)
+
+    return { placeable = p, uid = uid, name = name, model = model, demand = demand,
              hasAnimals = hasAnimals, held = held, engine = engine, modelF = modelF,
              groups = groups }
 end
@@ -127,15 +130,67 @@ function AnimalReduxPage:rebuild()
     self.barns = {}
     local ps = g_currentMission ~= nil and g_currentMission.placeableSystem or nil
     if ps == nil then return end
+    local seen = {}
     for _, p in ipairs(ps.placeables) do
-        if p.spec_husbandryFood ~= nil then
+        -- ONE ROW PER PLACEABLE. Guarding on identity rather than trusting the
+        -- list: a building appearing twice here would be a counting fault, and
+        -- silently showing it twice is exactly the sort of thing that gets
+        -- mistaken for the farm really having two of them.
+        if p.spec_husbandryFood ~= nil and seen[p] == nil then
+            seen[p] = true
             local b = readBarn(p)
             if b ~= nil then self.barns[#self.barns + 1] = b end
         end
     end
+
+    -- DUPLICATE NAMES get a " (n)" suffix, DR's convention (CLAUDE.md 5.7). Three
+    -- buildings called "Shed With Open Chicken Pasture" are indistinguishable
+    -- otherwise, and the reasonable reading of three identical rows is that
+    -- something is listing one building three times.
+    --
+    -- Numbered by uniqueId, NOT by position in this list, so a building keeps its
+    -- number as others are built or demolished around it.
+    local byName = {}
+    for _, b in ipairs(self.barns) do
+        local g = byName[b.name]
+        if g == nil then g = {}; byName[b.name] = g end
+        g[#g + 1] = b
+    end
+    for name, group in pairs(byName) do
+        if #group > 1 then
+            table.sort(group, function(x, y) return tostring(x.uid) < tostring(y.uid) end)
+            for i, b in ipairs(group) do b.name = string.format("%s (%d)", name, i) end
+        end
+    end
+
     table.sort(self.barns, function(a, b) return a.name < b.name end)
-    if self.selectedBarn == nil or self.selectedBarn > #self.barns then self.selectedBarn = 1 end
-    self.rows = (self.barns[self.selectedBarn] or {}).groups or {}
+
+    -- SELECTION FOLLOWS THE BUILDING, not the row number. This list is rebuilt on
+    -- every refresh tick, and a barn being built or demolished would otherwise
+    -- slide a different one under the player's selection (the same reason DR's
+    -- Overview matches double-clicks on identity rather than index, 5.37).
+    self.selectedBarn = 1
+    if self.selectedUid ~= nil then
+        for i, b in ipairs(self.barns) do
+            if b.uid == self.selectedUid then self.selectedBarn = i; break end
+        end
+    end
+    local sel = self.barns[self.selectedBarn]
+    self.selectedUid = sel ~= nil and sel.uid or nil
+    self.rows = (sel or {}).groups or {}
+end
+
+---Called by DR's paced refresh for pages that CACHE their figures -- which this
+-- one does, in self.barns. Without it the tab would show whatever it read when
+-- it was opened and never move again.
+--
+-- One engine measureFactor per barn per refresh. That is the cost of the ENGINE
+-- column being the truth rather than an opinion, and DR's duty-cycle limiter
+-- measures the whole refresh and stretches the interval if it gets expensive, so
+-- it is self-limiting on a big farm.
+function AnimalReduxPage:rebuildRealtimeData()
+    self:rebuild()
+    self:updateSummary()
 end
 
 function AnimalReduxPage:updateSummary()
@@ -229,8 +284,11 @@ end
 
 function AnimalReduxPage:onListSelectionChanged(list, section, index)
     if list ~= self.barnList then return end
+    local b = (self.barns or {})[index]
     self.selectedBarn = index
-    self.rows = (self.barns[index] or {}).groups or {}
+    self.selectedUid = b ~= nil and b.uid or nil    -- remembered by IDENTITY, so a refresh
+                                                    -- cannot slide another barn underneath it
+    self.rows = (b or {}).groups or {}
     if self.groupList ~= nil then self.groupList:reloadData() end
     self:updateSummary()
 end
