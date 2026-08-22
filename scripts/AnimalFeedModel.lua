@@ -180,8 +180,17 @@ function AnimalFeedModel.factorOf(model, trough, demand)
         local held = 0
         for _, ft in ipairs(g.fts) do held = held + (trough[ft] or 0) end
         if held <= 0 then return 0 end
-        if demand == nil or demand <= 0 or eatSum <= 0 then return 1 end
-        local need = demand * g.eat / eatSum
+        if demand == nil or demand <= 0 then return 1 end
+        -- SERIAL groups are ALTERNATIVES: the herd eats ONE tier at the full rate,
+        -- so each tier's requirement is the whole demand. Splitting it by eat share
+        -- (right for PARALLEL components) understated a cow tier's need fourfold.
+        local need
+        if model.consumptionType == "SERIAL" then
+            need = demand
+        else
+            if eatSum <= 0 then return 1 end
+            need = demand * g.eat / eatSum
+        end
         if need <= 0 then return 1 end
         return math.min(1, held / need)
     end

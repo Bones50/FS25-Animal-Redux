@@ -48,7 +48,7 @@
         <!-- RIGHT: summary strip for the selected barn -->
         <Bitmap profile="SDList" position="390px -46px" size="1090px 40px">
             <Text profile="SDRowCell" position="16px 0px" size="1058px 40px" textSize="15px"
-                  name="summaryLine" text=""/>
+                  id="summaryLine" text=""/>
         </Bitmap>
 
         <!-- RIGHT: one row per food group -->

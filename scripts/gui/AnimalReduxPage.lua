@@ -101,7 +101,13 @@ local function readBarn(p)
         for _, g in ipairs(model.groups) do
             local gHeld = 0
             for _, ft in ipairs(g.fts) do gHeld = gHeld + (trough[ft] or 0) end
-            local need = (hasAnimals and eatSum > 0) and (demand * g.eat / eatSum) or 0
+            -- SERIAL: one tier feeds the whole herd, so its need is the full demand.
+            -- PARALLEL: each group supplies its eat share.
+            local need = 0
+            if hasAnimals then
+                if model.consumptionType == "SERIAL" then need = demand
+                elseif eatSum > 0 then need = demand * g.eat / eatSum end
+            end
             local met = 1
             if need > 0 then met = math.min(1, gHeld / need) end
             local names = {}
@@ -121,9 +127,18 @@ local function readBarn(p)
     local SD = AnimalRedux ~= nil and AnimalRedux.DR or nil
     local uid = (SD ~= nil and SD.assetUid ~= nil) and SD.assetUid(p) or tostring(p)
 
+    -- A MEADOW IS A FOOD SOURCE THE TROUGH DOES NOT SHOW. PlaceableHusbandryMeadow
+    -- overrides getAvailableFood / removeFood / getFoodInfos, so grazed grass
+    -- reaches consumeFood without ever passing through spec_husbandryFood
+    -- .fillLevels. That is why a cow barn can read every group at 0 L and still
+    -- score 0.40: the herd is eating the pasture, and 0.40 is the Grass tier.
+    -- Reported rather than hidden -- the numbers are right, they just are not the
+    -- whole story, and a contradiction on screen is worse than a caveat.
+    local grazes = p.spec_husbandryMeadow ~= nil
+
     return { placeable = p, uid = uid, name = name, model = model, demand = demand,
              hasAnimals = hasAnimals, held = held, engine = engine, modelF = modelF,
-             groups = groups }
+             grazes = grazes, groups = groups }
 end
 
 function AnimalReduxPage:rebuild()
@@ -231,7 +246,10 @@ function AnimalReduxPage:updateSummary()
         b.demand, vol(b.held),
         b.engine or 0, b.modelF or 0,
         (b.engine ~= nil and b.modelF ~= nil and math.abs(b.engine - b.modelF) > 0.02)
-            and l10n("ar_sum_disagree", "   <<< MODEL DISAGREES") or ""))
+            and l10n("ar_sum_disagree", "   <<< MODEL DISAGREES") or "")
+        .. (b.grazes and l10n("ar_sum_grazes",
+            "   -  GRAZES A MEADOW: pasture grass feeds these animals without appearing in the trough")
+            or ""))
 end
 
 -- ---------------------------------------------------------------------------

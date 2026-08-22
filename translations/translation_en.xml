@@ -74,5 +74,6 @@
         <text name="ar_sum_noAnimals"      text="%s  -  no animals, so nothing is being fed"/>
         <text name="ar_sum_none"           text="No animal husbandry on this farm."/>
         <text name="ar_sum_disagree"       text="   &lt;&lt;&lt; MODEL DISAGREES"/>
+        <text name="ar_sum_grazes"         text="   -  GRAZES A MEADOW: pasture grass feeds these animals without appearing in the trough"/>
     </texts>
 </l10n>
