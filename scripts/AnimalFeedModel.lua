@@ -196,12 +196,44 @@ function AnimalFeedModel.factorOf(model, trough, demand)
     end
 
     if model.consumptionType == "SERIAL" then
-        local best = 0
-        for _, g in ipairs(model.groups) do
-            local f = g.production * served(g)
-            if f > best then best = f end
+        -- BEST-FIRST WEIGHTED AVERAGE, not the best tier's weight. Measured with
+        -- arFeedPartial: sweeping a cow's forage while the other tiers stayed full
+        -- gave 0.8000 / 0.8125 / 0.8250 / 0.8500 / 0.9000. A max-of-tiers model
+        -- predicts a flat 0.80 throughout and is simply wrong.
+        --
+        -- What the herd actually does is eat as much of the best tier as exists
+        -- and then fall to the next, so the factor is what it ATE, weighted:
+        --     factor = SUM (litres taken from tier / demand) x tier production
+        -- At 25% forage that is 0.25 x 1.0 + 0.75 x 0.8 = 0.85, exact.
+        --
+        -- Consequence worth knowing: PARTIAL forage is worth having. A cow on
+        -- silage plus a quarter of its forage scores 0.85, not 0.80 -- which is
+        -- why the plan offers every tier and lets DR's quality-then-distance sort
+        -- take the best available first.
+        if demand == nil or demand <= 0 then
+            -- the fully-stocked question: the best present tier covers everything
+            local best = 0
+            for _, g in ipairs(model.groups) do
+                if AnimalFeedModel.groupPresent(g, trough) and g.production > best then
+                    best = g.production
+                end
+            end
+            return best
         end
-        return best
+        -- model.groups is sorted by production DESC in read(), so this walks the
+        -- tiers in the order the animals eat them.
+        local remaining, f = demand, 0
+        for _, g in ipairs(model.groups) do
+            local held = 0
+            for _, ft in ipairs(g.fts) do held = held + (trough[ft] or 0) end
+            local take = math.min(held, remaining)
+            if take > 0 then
+                f = f + (take / demand) * g.production
+                remaining = remaining - take
+            end
+            if remaining <= 0 then break end
+        end
+        return math.min(1.0, f)
     end
 
     local sum = 0

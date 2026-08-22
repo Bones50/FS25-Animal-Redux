@@ -446,7 +446,16 @@ local function sweepBarn(p, ati, name)
 
     for _, g in ipairs(model.groups) do
         if g.rep ~= nil then
-            local need = demand * g.eat / eatSum
+            -- SERIAL tiers are ALTERNATIVES: one tier feeds the whole herd, so its
+            -- need is the full demand. The first run split it by eat share and
+            -- labelled 182.3 L "100%" for a cow that really needs 729 -- the sweep
+            -- data was still valid (it swept absolute litres) but the columns lied.
+            local need
+            if model.consumptionType == "SERIAL" then
+                need = demand
+            else
+                need = demand * g.eat / eatSum
+            end
             local line = string.format("  %-20s", g.title)
             for i = 1, #PARTIAL_LABEL do
                 local mult = PARTIAL_MULT[i]
