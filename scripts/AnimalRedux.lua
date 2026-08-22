@@ -135,6 +135,18 @@ function AnimalRedux.onMissionLoaded()
         AnimalRedux.VERSION, tostring(whereOrWhy), apiVersion,
         apiOk and "" or string.format("; this mod wants v%d+", AnimalRedux.DR_MIN_API))
 
+    -- TEMPORARY dev probe (arFoodProbe). Registration is separate from the link
+    -- itself so a probe failure can never stop the mod loading. Console commands
+    -- need game.xml <development><controls>true, so this is unreachable in a
+    -- normal install; it still announces itself, because a probe nobody knows
+    -- about is a probe nobody runs.
+    if AnimalFoodProbe ~= nil and AnimalFoodProbe.register ~= nil then
+        local okP, registered = pcall(AnimalFoodProbe.register)
+        if okP and registered then
+            AnimalRedux.warn("dev probe available: arFoodProbe [name fragment] [litres]")
+        end
+    end
+
     -- Features attach from here. Nothing yet -- this build only proves the link.
 end
 

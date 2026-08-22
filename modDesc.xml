@@ -26,6 +26,8 @@ Feedback/Issues: https://github.com/Bones50/FS25-Animal-Redux
 
     <extraSourceFiles>
         <sourceFile filename="scripts/AnimalRedux.lua"/>
+        <!-- TEMPORARY dev probe. Remove with the file once the feed model is settled. -->
+        <sourceFile filename="scripts/AnimalFoodProbe.lua"/>
     </extraSourceFiles>
 
     <!-- HARD DEPENDENCY. The game warns the player when this is missing; the mod

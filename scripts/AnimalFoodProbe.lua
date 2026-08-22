@@ -1,0 +1,342 @@
+-- ============================================================================
+-- AnimalFoodProbe.lua  (Animal Redux)  -- TEMPORARY DEV PROBE
+--
+-- Measures what the base game's AnimalFoodSystem:consumeFood actually rewards,
+-- because it cannot be READ: AnimalFoodSystem is NOT in the shipped SDK source
+-- (the only references anywhere are PlaceableHusbandryFood and MixerWagon), so
+-- the mix -> production-factor curve is unreadable and has to be measured.
+--
+-- WHY IT MATTERS. PlaceableHusbandryFood:updateFeeding does:
+--
+--     factor = factor * animalFoodSystem:consumeFood(animalTypeIndex,
+--                  litersPerHour * timeAdjustment, self, consumedFood)
+--     for fillTypeIndex, delta in pairs(consumedFood) do
+--         self:removeFood(delta, fillTypeIndex)
+--     end
+--
+-- so production is SCALED by how well the trough matches the food groups, and
+-- the base game renders each group's productionWeight as a PERCENTAGE of the mix
+-- ("%s (%d%%)"). Distribution Redux instead treats productionWeight as a QUALITY
+-- RANK and fills best-first. If the factor rewards a MIX, DR is suppressing
+-- animal output on every multi-group feeder.
+--
+-- WHY SWEEPING IS SAFE. consumeFood does NOT remove food -- it fills the
+-- `consumedFood` table and returns the factor, and the CALLER applies the
+-- removal. So calling it never feeds anything and never consumes stock. The only
+-- state touched is the barn's own fillLevels table, snapshotted and restored on
+-- EVERY path including a throw (the sdStressBig rule).
+--
+-- A REAL barn is used rather than a duck-typed mock (the sdStress approach)
+-- because consumeFood's body is unreadable: we cannot know which fields or
+-- methods it touches, so a mock could silently answer a different question.
+-- Borrowing a real barn guarantees the environment is exactly what the game uses.
+--
+-- Usage (needs game.xml <development><controls>true):
+--     arFoodProbe                  -- first husbandry with a food spec
+--     arFoodProbe <name fragment>  -- first barn whose name contains this
+--     arFoodProbe <frag> <liters>  -- override the demand used per sample
+--
+-- REMOVE once the feed model is settled.
+-- ============================================================================
+
+AnimalFoodProbe = {}
+
+local TOTAL_FOOD = 10000    -- litres placed in the trough per sample, capped to capacity
+local DEMAND     = 100      -- litres asked for. Kept well under TOTAL so AVAILABILITY is
+                            -- never the limiter and the only thing varying is the MIX.
+
+-- ---------------------------------------------------------------------------
+local function ftName(ft)
+    if ft == nil then return "nil" end
+    local m = g_fillTypeManager
+    if m ~= nil and m.getFillTypeNameByIndex ~= nil then
+        local ok, n = pcall(m.getFillTypeNameByIndex, m, ft)
+        if ok and n ~= nil then return tostring(n) end
+    end
+    return "ft" .. tostring(ft)
+end
+
+local function pad(s, n)
+    s = tostring(s)
+    while #s < n do s = s .. " " end
+    return s
+end
+
+local function out(fmt, ...)
+    local ok, msg = pcall(string.format, fmt, ...)
+    print("[arFoodProbe] " .. (ok and msg or tostring(fmt)))
+end
+
+-- ---------------------------------------------------------------------------
+-- Every husbandry with a food spec, optionally filtered by a name fragment.
+function AnimalFoodProbe.findBarns(fragment)
+    local found = {}
+    local ps = g_currentMission ~= nil and g_currentMission.placeableSystem or nil
+    if ps == nil then return found end
+    for _, p in ipairs(ps.placeables) do
+        if p.spec_husbandryFood ~= nil then
+            local name = "?"
+            local okN, n = pcall(function() return p:getName() end)
+            if okN and n ~= nil then name = tostring(n) end
+            if fragment == nil or fragment == ""
+               or string.find(string.lower(name), string.lower(fragment), 1, true) ~= nil then
+                found[#found + 1] = { placeable = p, name = name }
+            end
+        end
+    end
+    return found
+end
+
+function AnimalFoodProbe.animalTypeIndexOf(p)
+    local spec = p.spec_husbandryFood
+    local ati = spec ~= nil and spec.animalTypeIndex or nil
+    if ati == nil and p.getAnimalTypeIndex ~= nil then
+        local ok, a = pcall(p.getAnimalTypeIndex, p)
+        if ok then ati = a end
+    end
+    return ati
+end
+
+-- ---------------------------------------------------------------------------
+-- The DECLARED target: each group's weight, plus a representative fill type to
+-- stand for that group in a synthetic mix.
+function AnimalFoodProbe.describeGroups(ati, supported)
+    local afs = g_currentMission ~= nil and g_currentMission.animalFoodSystem or nil
+    if afs == nil or afs.getAnimalFood == nil then return nil, "no animalFoodSystem" end
+    local okF, food = pcall(afs.getAnimalFood, afs, ati)
+    if not okF or food == nil or food.groups == nil then return nil, "getAnimalFood returned nothing" end
+
+    local groups = {}
+    for _, grp in pairs(food.groups) do
+        local fts, rep = {}, nil
+        for _, ft in pairs(grp.fillTypes or {}) do
+            fts[#fts + 1] = ft
+            if rep == nil and (supported == nil or supported[ft] ~= nil) then rep = ft end
+        end
+        groups[#groups + 1] = {
+            title  = tostring(grp.title or "?"),
+            weight = grp.productionWeight or 0,
+            fts    = fts,
+            rep    = rep,
+        }
+    end
+    table.sort(groups, function(a, b) return a.weight > b.weight end)
+    return groups
+end
+
+function AnimalFoodProbe.mixturesFor(ati)
+    local afs = g_currentMission ~= nil and g_currentMission.animalFoodSystem or nil
+    if afs == nil or afs.getMixturesByAnimalTypeIndex == nil then return {} end
+    local ok, mix = pcall(afs.getMixturesByAnimalTypeIndex, afs, ati)
+    if not ok or mix == nil then return {} end
+    return mix
+end
+
+-- ---------------------------------------------------------------------------
+---Measure the factor for one synthetic trough mix. `mix` is ft -> litres.
+-- Returns factor, consumedTable, errText
+function AnimalFoodProbe.sample(p, ati, mix, demand)
+    local spec = p.spec_husbandryFood
+    if spec == nil or spec.fillLevels == nil then return nil, nil, "no fillLevels" end
+    local afs = g_currentMission ~= nil and g_currentMission.animalFoodSystem or nil
+    if afs == nil or afs.consumeFood == nil then return nil, nil, "no consumeFood" end
+
+    -- snapshot the real trough
+    local snap = {}
+    for ft, lvl in pairs(spec.fillLevels) do snap[ft] = lvl end
+
+    -- apply the synthetic mix
+    for ft in pairs(spec.fillLevels) do spec.fillLevels[ft] = 0 end
+    for ft, litres in pairs(mix) do spec.fillLevels[ft] = litres end
+
+    local consumed = {}
+    local okC, factorOrErr = pcall(afs.consumeFood, afs, ati, demand, p, consumed)
+
+    -- restore on EVERY path, including a throw
+    for ft in pairs(spec.fillLevels) do spec.fillLevels[ft] = nil end
+    for ft, lvl in pairs(snap) do spec.fillLevels[ft] = lvl end
+
+    if not okC then return nil, nil, tostring(factorOrErr) end
+    return factorOrErr, consumed, nil
+end
+
+local function consumedText(consumed)
+    if consumed == nil then return "" end
+    local parts = {}
+    for ft, d in pairs(consumed) do
+        if d ~= nil and d > 0.0001 then
+            parts[#parts + 1] = string.format("%s %.1f", ftName(ft), d)
+        end
+    end
+    if #parts == 0 then return "(nothing)" end
+    table.sort(parts)
+    return table.concat(parts, ", ")
+end
+
+-- ---------------------------------------------------------------------------
+function AnimalFoodProbe.run(fragment, demandArg)
+    local demand = tonumber(demandArg) or DEMAND
+
+    local barns = AnimalFoodProbe.findBarns(fragment)
+    if #barns == 0 then
+        out("no husbandry with a food spec found%s.",
+            (fragment ~= nil and fragment ~= "") and (" matching '" .. tostring(fragment) .. "'") or "")
+        return
+    end
+
+    local barn = barns[1]
+    local p    = barn.placeable
+    local spec = p.spec_husbandryFood
+
+    out("=====================================================================")
+    out("barn: %s   (%d matched; probing the first)", barn.name, #barns)
+    if #barns > 1 then
+        local names = {}
+        for i = 1, #barns do names[#names + 1] = barns[i].name end
+        out("  others: %s", table.concat(names, " | "))
+    end
+
+    local ati = AnimalFoodProbe.animalTypeIndexOf(p)
+    if ati == nil then
+        out("could not resolve animalTypeIndex -- cannot probe this barn.")
+        return
+    end
+
+    local capacity = spec.capacity or 0
+    local total    = TOTAL_FOOD
+    if capacity > 0 and capacity < total then total = capacity end
+
+    out("animalTypeIndex=%s  capacity=%s  litersPerHour=%.2f  demand=%.1f  trough total=%.0f",
+        tostring(ati), tostring(capacity), spec.litersPerHour or 0, demand, total)
+
+    local supported, nSupported = spec.supportedFillTypes or {}, 0
+    for _ in pairs(supported) do nSupported = nSupported + 1 end
+    out("supported food types: %d", nSupported)
+
+    -- ---- the DECLARED target --------------------------------------------
+    local groups, why = AnimalFoodProbe.describeGroups(ati, supported)
+    if groups == nil then
+        out("could not read food groups: %s", tostring(why))
+        return
+    end
+
+    out("---------------------------------------------------------------------")
+    out("DECLARED FOOD GROUPS (the base game renders productionWeight as a %% of the mix)")
+    local wsum = 0
+    for _, g in ipairs(groups) do
+        wsum = wsum + g.weight
+        local names = {}
+        for _, ft in ipairs(g.fts) do names[#names + 1] = ftName(ft) end
+        out("  %s weight=%.3f (%3d%%)  rep=%s  fillTypes: %s",
+            pad(g.title, 18), g.weight, math.floor(g.weight * 100 + 0.5),
+            ftName(g.rep), table.concat(names, " "))
+    end
+    if math.abs(wsum - 1.0) < 0.02 then
+        out("  weights sum to %.3f  <- a RATIO: the target is a MIX, not a single best food", wsum)
+    else
+        out("  weights sum to %.3f  <- does NOT sum to 1; interpret with care", wsum)
+    end
+
+    local mixes = AnimalFoodProbe.mixturesFor(ati)
+    if #mixes > 0 then
+        local names = {}
+        for _, ft in ipairs(mixes) do names[#names + 1] = ftName(ft) end
+        out("  mixtures (complete rations): %s", table.concat(names, " "))
+    else
+        out("  mixtures (complete rations): none for this animal type")
+    end
+
+    -- ---- what Distribution Redux would do today --------------------------
+    local SD = AnimalRedux ~= nil and AnimalRedux.DR or nil
+    if SD ~= nil and SD._foodQualityMap ~= nil then
+        local okQ, qmap = pcall(SD._foodQualityMap, p)
+        if okQ and qmap ~= nil then
+            local best, bestQ = nil, -1
+            for ft, q in pairs(qmap) do
+                if supported[ft] ~= nil and q > bestQ then best, bestQ = ft, q end
+            end
+            if best ~= nil then
+                out("  Distribution Redux fills BEST-FIRST, i.e. all of: %s (weight %.3f)",
+                    ftName(best), bestQ)
+            end
+        end
+    end
+
+    -- ---- build the sweep --------------------------------------------------
+    local samples = {}
+    local function addSample(label, mix) samples[#samples + 1] = { label = label, mix = mix } end
+
+    addSample("EMPTY trough", {})
+
+    for _, g in ipairs(groups) do
+        if g.rep ~= nil then
+            addSample(string.format("100%% %s", ftName(g.rep)), { [g.rep] = total })
+        end
+    end
+
+    local declared, declaredOk = {}, true
+    for _, g in ipairs(groups) do
+        if g.rep == nil then
+            declaredOk = false
+        elseif g.weight > 0 then
+            declared[g.rep] = (declared[g.rep] or 0) + total * g.weight
+        end
+    end
+    if declaredOk and next(declared) ~= nil then
+        addSample("DECLARED RATIO", declared)
+    end
+
+    -- blends between "all in the top group" (what DR does) and the declared ratio
+    local top = groups[1]
+    if declaredOk and top ~= nil and top.rep ~= nil and #groups > 1 then
+        local steps = { 0.25, 0.50, 0.75 }
+        for _, f in ipairs(steps) do
+            local mix = {}
+            for ft, litres in pairs(declared) do mix[ft] = litres * f end
+            mix[top.rep] = (mix[top.rep] or 0) + total * (1 - f)
+            addSample(string.format("%d%% toward declared", math.floor(f * 100 + 0.5)), mix)
+        end
+    end
+
+    for _, ft in ipairs(mixes) do
+        if supported[ft] ~= nil then
+            addSample(string.format("100%% %s (mixture)", ftName(ft)), { [ft] = total })
+        end
+    end
+
+    -- ---- measure ----------------------------------------------------------
+    out("---------------------------------------------------------------------")
+    out("MEASURED FACTOR (trough total fixed at %.0f L, demand %.1f L, so only the MIX varies)",
+        total, demand)
+    out("  %s %s %s", pad("mix", 26), pad("factor", 10), "consumeFood took")
+    for _, s in ipairs(samples) do
+        local factor, consumed, err = AnimalFoodProbe.sample(p, ati, s.mix, demand)
+        if err ~= nil then
+            out("  %s %s ERROR: %s", pad(s.label, 26), pad("-", 10), err)
+        else
+            out("  %s %s %s", pad(s.label, 26),
+                pad(string.format("%.4f", factor or -1), 10), consumedText(consumed))
+        end
+    end
+
+    out("---------------------------------------------------------------------")
+    out("HOW TO READ IT: if DECLARED RATIO scores HIGHER than '100%% <top group>',")
+    out("filling best-first is wrong and Distribution Redux is losing production.")
+    out("=====================================================================")
+end
+
+-- ---------------------------------------------------------------------------
+function AnimalFoodProbe.register()
+    if addConsoleCommand == nil then return false end
+    if AnimalFoodProbe._registered then return true end
+    addConsoleCommand("arFoodProbe", "Measure the animal food mix -> production factor curve",
+        "consoleCommand", AnimalFoodProbe)
+    AnimalFoodProbe._registered = true
+    return true
+end
+
+function AnimalFoodProbe:consoleCommand(fragment, demand)
+    local ok, err = pcall(AnimalFoodProbe.run, fragment, demand)
+    if not ok then return "arFoodProbe failed: " .. tostring(err) end
+    return "arFoodProbe done -- see log.txt"
+end
