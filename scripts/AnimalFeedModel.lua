@@ -344,6 +344,23 @@ function AnimalFeedModel.Console.run(fragment)
                     out("           held %.0f L -> engine factor %s", nowTotal,
                         nowF ~= nil and string.format("%.4f", nowF) or "?")
 
+                    -- THE COUNTERFACTUAL. Comparing the plan against whatever
+                    -- happens to be in the trough is worthless when the trough
+                    -- is empty -- it reports a 100% gain that only means "feed
+                    -- your animals". The comparison that matters is against
+                    -- what Distribution Redux does TODAY: everything into the
+                    -- single highest production weight. Measured through the
+                    -- engine, same as the plan, so it holds whatever the state
+                    -- of the farm.
+                    local drMix = {}
+                    for _, g in ipairs(model.groups) do          -- sorted production DESC
+                        if g.rep ~= nil then drMix[g.rep] = pool; break end
+                    end
+                    local drF = select(1, AnimalFeedModel.measureFactor(p, ati, drMix, demand))
+                    out("  DR TODAY %s   (best-first)", mixText(drMix))
+                    out("           over %.0f L -> engine factor %s", pool,
+                        drF ~= nil and string.format("%.4f", drF) or "?")
+
                     local plan = AnimalFeedModel.plannedFill(model, pool)
                     local planF, _, err = AnimalFeedModel.measureFactor(p, ati, plan, demand)
                     out("  PLANNED  %s", mixText(plan))
@@ -361,11 +378,24 @@ function AnimalFeedModel.Console.run(fragment)
                                 predicted, planF)
                             out("  *** trust the engine. The model is wrong for this animal type. ***")
                         end
-                        if nowF ~= nil and planF > nowF + 0.01 then
-                            out("  would GAIN %.1f%% production here", (planF - nowF) * 100)
-                        elseif nowF ~= nil and planF < nowF - 0.01 then
-                            out("  would LOSE %.1f%% -- investigate before wiring this up",
-                                (nowF - planF) * 100)
+                        -- The verdict is model vs DR TODAY. Never model vs the
+                        -- current trough: an empty barn makes any plan look like
+                        -- a 100% win, which is an artefact of the barn being
+                        -- empty and says nothing about the model.
+                        if drF ~= nil then
+                            if planF > drF + 0.005 then
+                                out("  VERDICT  model beats DR today: %.4f vs %.4f  (+%.1f%% production)",
+                                    planF, drF, (planF / math.max(drF, 0.0001) - 1) * 100)
+                            elseif planF < drF - 0.005 then
+                                out("  VERDICT  model is WORSE than DR today: %.4f vs %.4f "
+                                    .. "-- do NOT wire this up", planF, drF)
+                            else
+                                out("  VERDICT  no change (%.4f) -- DR is already correct for this animal",
+                                    planF)
+                            end
+                        end
+                        if nowTotal <= 0 then
+                            out("  (the trough is EMPTY, so the CURRENT row is not a comparison)")
                         end
                     end
                 end
