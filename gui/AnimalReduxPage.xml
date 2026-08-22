@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!-- Animal Redux tab: two panes, matching Distribution Redux's building tabs.
+     LEFT  the farm's husbandries, each with the production factor the ENGINE
+           reports for it right now.
+     RIGHT the selected barn's FOOD GROUPS, one row each, showing which group is
+           short and by how much. A barn scoring badly is only actionable once
+           you can see WHICH group is starving it.
+
+     Column arithmetic, hand tiled like DR's tables: 16px left margin, 8px
+     gutters, ending at 1074 inside a 1090 pane.
+       16 + 190 = 206 | 214 + 100 = 314 | 322 + 100 = 422 | 430 + 80 = 510
+       518 + 110 = 628 | 636 + 100 = 736 | 744 + 330 = 1074
+
+     Profiles (SDList, SDListItemStats, SDRowCell...) come from DR's
+     DistributionSiloProfiles.xml, which is already loaded by the time this page
+     is: g_gui profiles are global once registered, and DR loads them in
+     registerMenuGui before firing the menu ready callbacks.
+
+     NOTE an XML comment may not contain a double hyphen anywhere. -->
+<GUI name="animalReduxPage">
+    <GuiElement profile="fs25_menuContainer">
+        <GuiElement profile="fs25_menuHeaderPanel">
+            <Bitmap profile="fs25_menuHeaderIconBg">
+                <Bitmap profile="fs25_menuHeaderIcon" imageSliceId="gui.icon_ingameMenu_animals"/>
+            </Bitmap>
+            <Text profile="fs25_menuHeaderTitle" text="$l10n_ar_title_husbandry"/>
+        </GuiElement>
+
+        <!-- LEFT: the husbandries -->
+        <Bitmap profile="SDList" position="0px -46px" size="370px 40px">
+            <Text profile="SDHeaderLeft" position="16px 0px"  size="230px 40px" textSize="11px"
+                  text="$l10n_ar_col_barn"/>
+            <Text profile="SDHeaderLeft" position="254px 0px" size="100px 40px" textSize="11px"
+                  text="$l10n_ar_col_factor"/>
+            <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <SmoothList profile="SDList" id="barnList" position="0px -90px" size="370px 720px"
+                    onSelectionChanged="onListSelectionChanged"
+                    focusChangeTop="nil" focusChangeBottom="nil">
+            <ListItem profile="SDListItem" name="rowTemplate" size="370px 52px">
+                <Text profile="SDRowCell"  position="16px 0px"  size="230px 52px" textSize="15px"
+                      name="barnName"/>
+                <Text profile="SDRowCellR" position="254px 0px" size="100px 52px" textSize="15px"
+                      name="barnFactor"/>
+            </ListItem>
+        </SmoothList>
+
+        <!-- RIGHT: summary strip for the selected barn -->
+        <Bitmap profile="SDList" position="390px -46px" size="1090px 40px">
+            <Text profile="SDRowCell" position="16px 0px" size="1058px 40px" textSize="15px"
+                  name="summaryLine" text=""/>
+        </Bitmap>
+
+        <!-- RIGHT: one row per food group -->
+        <Bitmap profile="SDList" position="390px -92px" size="1090px 40px">
+            <Text profile="SDHeaderLeft"  position="16px 0px"  size="190px 40px" textSize="11px"
+                  text="$l10n_ar_col_group"/>
+            <Text profile="SDHeaderRight" position="214px 0px" size="100px 40px" textSize="11px"
+                  text="$l10n_ar_col_needsPerHour"/>
+            <Text profile="SDHeaderRight" position="322px 0px" size="100px 40px" textSize="11px"
+                  text="$l10n_ar_col_held"/>
+            <Text profile="SDHeaderRight" position="430px 0px" size="80px 40px"  textSize="11px"
+                  text="$l10n_ar_col_met"/>
+            <Text profile="SDHeaderRight" position="518px 0px" size="110px 40px" textSize="11px"
+                  text="$l10n_ar_col_contributes"/>
+            <Text profile="SDHeaderRight" position="636px 0px" size="100px 40px" textSize="11px"
+                  text="$l10n_ar_col_ofMax"/>
+            <Text profile="SDHeaderLeft"  position="744px 0px" size="330px 40px" textSize="11px"
+                  text="$l10n_ar_col_accepts"/>
+            <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <SmoothList profile="SDList" id="groupList" position="390px -136px" size="1090px 674px"
+                    focusChangeTop="nil" focusChangeBottom="nil">
+            <ListItem profile="SDListItemStats" name="rowTemplate" size="1090px 42px">
+                <Text profile="SDRowCell"  position="16px 0px"  size="190px 42px" textSize="12px"
+                      name="groupName"/>
+                <Text profile="SDRowCellR" position="214px 0px" size="100px 42px" textSize="12px"
+                      name="groupNeed"/>
+                <Text profile="SDRowCellR" position="322px 0px" size="100px 42px" textSize="12px"
+                      name="groupHeld"/>
+                <Text profile="SDRowCellR" position="430px 0px" size="80px 42px"  textSize="12px"
+                      name="groupMet"/>
+                <Text profile="SDRowCellR" position="518px 0px" size="110px 42px" textSize="12px"
+                      name="groupContrib"/>
+                <Text profile="SDRowCellR" position="636px 0px" size="100px 42px" textSize="12px"
+                      name="groupMax"/>
+                <Text profile="SDRowCell"  position="744px 0px" size="330px 42px" textSize="12px"
+                      name="groupAccepts"/>
+            </ListItem>
+        </SmoothList>
+    </GuiElement>
+</GUI>

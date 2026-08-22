@@ -131,7 +131,7 @@ function AnimalRedux.resolveDistributionRedux()
 
     local direct = G[AnimalRedux.DR_MOD_NAME]
     if looksLikeDR(direct) then
-        return direct.SmartDistribution, AnimalRedux.DR_MOD_NAME
+        return direct.SmartDistribution, AnimalRedux.DR_MOD_NAME, direct
     end
 
     if g_modManager ~= nil and g_modManager.getActiveMods ~= nil then
@@ -142,7 +142,7 @@ function AnimalRedux.resolveDistributionRedux()
                 if type(name) == "string" and name ~= AnimalRedux.MOD_NAME then
                     local env = G[name]
                     if looksLikeDR(env) then
-                        return env.SmartDistribution, name
+                        return env.SmartDistribution, name, env
                     end
                 end
             end
@@ -197,7 +197,7 @@ end
 
 -- ---------------------------------------------------------------------------
 function AnimalRedux.onMissionLoaded()
-    local SD, whereOrWhy = AnimalRedux.resolveDistributionRedux()
+    local SD, whereOrWhy, env = AnimalRedux.resolveDistributionRedux()
 
     if SD == nil then
         AnimalRedux.warn("Distribution Redux was not found (%s). Animal Redux requires it and is DISABLED.",
@@ -207,6 +207,8 @@ function AnimalRedux.onMissionLoaded()
     end
 
     AnimalRedux.DR = SD
+    AnimalRedux.DR_ENV = env          -- DR's whole environment; the GUI page needs
+                                      -- DistributionMenuPage, which is not on SmartDistribution
     AnimalRedux.enabled = true
 
     local apiVersion, apiOk = AnimalRedux.checkApiVersion(SD)
@@ -268,6 +270,24 @@ function AnimalRedux.onMissionLoaded()
         AnimalRedux.warn("Distribution Redux exposes no feed API (needs v%d+, found v%d) -- "
             .. "feed planning is INACTIVE and DR keeps its own logic",
             AnimalRedux.DR_MIN_API, apiVersion)
+    end
+
+    -- ---- THE ANIMALS TAB ----------------------------------------------------
+    -- Deferred to DR's menu-ready callback rather than added here, because DR
+    -- builds its menu LATER in this very same hook: mods load alphabetically, so
+    -- Animal Redux appended to loadMission00Finished first and runs first. At
+    -- this moment SmartDistribution._menu does not exist yet.
+    if SD.API ~= nil and SD.API.onMenuReady ~= nil then
+        SD.API.onMenuReady(AnimalRedux.MOD_NAME, function(menu)
+            local okT, why = AnimalReduxPage.install(menu)
+            if okT then
+                AnimalRedux.warn("Animals tab added to the Distribution Redux menu")
+            else
+                AnimalRedux.warn("Animals tab NOT added: %s", tostring(why))
+            end
+        end)
+    else
+        AnimalRedux.warn("Distribution Redux has no menu API (needs v3+); no Animals tab")
     end
 
     -- Features attach from here. Nothing yet -- this build only proves the link.

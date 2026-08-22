@@ -27,6 +27,7 @@ Feedback/Issues: https://github.com/Bones50/FS25-Animal-Redux
     <extraSourceFiles>
         <sourceFile filename="scripts/AnimalRedux.lua"/>
         <sourceFile filename="scripts/AnimalFeedModel.lua"/>
+        <sourceFile filename="scripts/gui/AnimalReduxPage.lua"/>
         <!-- TEMPORARY dev probe. Remove with the file once the feed model is settled. -->
         <sourceFile filename="scripts/AnimalFoodProbe.lua"/>
     </extraSourceFiles>

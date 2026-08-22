@@ -52,5 +52,27 @@
              mysteriously untranslated UI. The value is matched in code, so
              LEAVE IT AS "ok" IN EVERY LANGUAGE. -->
         <text name="ar_l10n_selftest" text="ok"/>
+
+        <!-- The Animals tab. Column headers are TIGHT: the widths are hand tiled
+             and overrun is clipped, not wrapped. Budgets in characters at 11px:
+             barn 30, factor 12, group 26, the numeric columns 12 each,
+             accepts 44. -->
+        <text name="ar_tab_animals"        text="Animal Redux"/>
+        <text name="ar_title_husbandry"    text="Animal Redux - Husbandry Health"/>
+
+        <text name="ar_col_barn"           text="HUSBANDRY"/>
+        <text name="ar_col_factor"         text="FACTOR"/>
+        <text name="ar_col_group"          text="FOOD GROUP"/>
+        <text name="ar_col_needsPerHour"   text="NEEDS / H"/>
+        <text name="ar_col_held"           text="HELD"/>
+        <text name="ar_col_met"            text="MET"/>
+        <text name="ar_col_contributes"    text="CONTRIBUTES"/>
+        <text name="ar_col_ofMax"          text="OF MAX"/>
+        <text name="ar_col_accepts"        text="ACCEPTS"/>
+
+        <text name="ar_sum_line"           text="%s  -  %s  -  eats %.1f L/h  -  trough %s  -  ENGINE %.4f  -  model %.4f%s"/>
+        <text name="ar_sum_noAnimals"      text="%s  -  no animals, so nothing is being fed"/>
+        <text name="ar_sum_none"           text="No animal husbandry on this farm."/>
+        <text name="ar_sum_disagree"       text="   &lt;&lt;&lt; MODEL DISAGREES"/>
     </texts>
 </l10n>
