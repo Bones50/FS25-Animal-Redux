@@ -265,10 +265,16 @@ function AnimalReduxPage.install(menu)
         return false, "page XML failed to load"
     end
 
-    -- Position 4 puts it after DR's Animal Husbandry tab, where an animal tab
-    -- belongs. Icon is a base-game slice, which is why DR's helper is used
-    -- rather than TabbedMenu:addPage (that one only takes a texture file).
-    local ok = SD.API.addMenuPage(menu, page, 4, "gui.icon_ingameMenu_animals",
+    -- APPENDED (position nil), not slotted in beside the Animal Husbandry tab
+    -- where it would sit more naturally. PagingElement:addElement appends, and
+    -- TabbedMenu:registerPage would insert at whatever position is asked for --
+    -- so requesting one leaves the tab strip (which follows pageFrames order) and
+    -- the paging element in DIFFERENT orders. Appending keeps them in step.
+    -- Revisit only with a way to insert into both.
+    --
+    -- The icon is a base-game slice, which is why DR's helper is used rather than
+    -- TabbedMenu:addPage: that one takes a texture file and UVs instead.
+    local ok = SD.API.addMenuPage(menu, page, nil, "gui.icon_ingameMenu_animals",
                                   l10n("ar_tab_animals", "Animal Redux"),
                                   function() return true end,
                                   { SD.API.menuBackButton(menu) })
