@@ -168,10 +168,7 @@ local function readBarn(p)
     if p.getClusters ~= nil then
         local okC, clusters = pcall(p.getClusters, p)
         if okC and type(clusters) == "table" and #clusters > 0 then
-            -- averaged per CLUSTER, which is how the base game's info box does it
-            local sum = 0
-            for _, c in ipairs(clusters) do sum = sum + (c.health or 0) end
-            health = sum / #clusters
+            health = AnimalReduxPage.herdHealthFactor(clusters)
         end
     end
 
@@ -290,6 +287,21 @@ function AnimalReduxPage:rebuild()
     self.selectedUid = sel ~= nil and sel.uid or nil
     self.rows = (sel or {}).groups or {}
     self.conds = (sel or {}).conditions or {}
+
+    -- built EVERY rebuild, not only when their view is showing: the Trade view
+    -- reads the herd totals the cluster pass computes, and the summary strip
+    -- wants them whichever pane is up.
+    local clRows, herd = self:buildClusterRows(sel)
+    self.clusterRows = clRows
+    self._herd = herd
+
+    -- The PLAN walks the clusters again and, the first time it meets a subtype,
+    -- clone-sweeps a price curve out of the running game. That is cheap and
+    -- cached, but it is work no other view needs -- so only the Trade view pays,
+    -- the same reasoning as _realtimeLists.
+    if self:viewIndexSafe() == AnimalReduxPage.VIEW_TRADE then
+        self.tradeRows = self:buildTradeRows(sel, herd)
+    end
 end
 
 ---Called by DR's paced refresh for pages that CACHE their figures -- which this
@@ -349,11 +361,425 @@ function AnimalReduxPage:updateSummary()
 end
 
 -- ---------------------------------------------------------------------------
+-- CLUSTER + TRADE ROWS
+--
+-- Everything here rests on what arReproProbe measured (CLAUDE.md 11.9 / 11.11):
+--   reproduction climbs by 100/durationMonth each period; at >= 100 the whole
+--   cluster births ONE OFFSPRING PER ANIMAL and resets to 0. Both gates are
+--   cliffs: below minHealthFactor (0.75) or below minAgeMonth nothing happens
+--   AND the counter is not even advanced, so an underfed herd is frozen rather
+--   than losing progress.
+--
+-- The gates are therefore checked in the same order the engine checks them, and
+-- "no room" is reported LAST -- because it is the only one of the three that
+-- destroys anything. A gated cluster is paused and fully recoverable; a cluster
+-- that breeds into a full pen loses the calves AND the months that made them.
+-- ---------------------------------------------------------------------------
+
+local function money(v)
+    if v == nil then return "-" end
+    if g_i18n ~= nil and g_i18n.formatMoney ~= nil then
+        local ok, s = pcall(g_i18n.formatMoney, g_i18n, v, 0, true, true)
+        if ok and s ~= nil then return tostring(s) end
+    end
+    return string.format("%d", math.floor((v or 0) + 0.5))
+end
+
+---Herd health as a FACTOR (0..1), weighted by headcount.
+--
+-- WEIGHTED because a cluster is a GROUP, not an animal: a cluster of one sick
+-- beast must not count for as much as a cluster of two hundred healthy ones.
+-- (It makes no difference on horses, where the game gives every animal its own
+-- cluster, and a great deal on everything else.)
+--
+-- 0..1 because that is the unit of every other factor on the barn record
+-- (engine, modelF, prod), while the raw cluster field is 0..100. Mixing the two
+-- is exactly how the Trade view came to print 10000%: the summary line and the
+-- trade row each multiplied an already-percent figure by 100 again. The unit now
+-- lives in the NAME -- `health` is a factor, `healthPct` on a cluster row is the
+-- raw percentage.
+--
+-- A FIELD rather than an inline block inside readBarn, deliberately: the bug
+-- shipped because this arithmetic sat in a function that needs half the mod to
+-- construct, so nothing could drive it. Here a harness can.
+function AnimalReduxPage.herdHealthFactor(clusters)
+    if type(clusters) ~= "table" then return nil end
+    local sum, counted = 0, 0
+    for _, c in ipairs(clusters) do
+        local n = c.numAnimals or 0
+        sum = sum + (c.health or 0) * n
+        counted = counted + n
+    end
+    if counted <= 0 then return nil end
+    return (sum / counted) / 100
+end
+
+local function subTypeOf(sti)
+    local asys = g_currentMission ~= nil and g_currentMission.animalSystem or nil
+    if asys == nil or asys.getSubTypeByIndex == nil or sti == nil then return nil end
+    local ok, st = pcall(asys.getSubTypeByIndex, asys, sti)
+    if ok and type(st) == "table" then return st end
+    return nil
+end
+
+---One row per cluster of the selected barn, plus the herd totals the Trade view
+-- reads back off self._herd.
+function AnimalReduxPage:buildClusterRows(b)
+    local rows = { }
+    -- lowHealth and noRoom are counted SEPARATELY: one is a pause that costs
+    -- nothing and recovers fully, the other destroys animals. Folding them
+    -- into one 'blocked' figure would report them as the same problem.
+    local herd = { value = 0, atFullHealth = 0, births = 0, breeding = 0,
+                   lowHealth = 0, noRoom = 0 }
+    if b == nil or b.placeable == nil then return rows, herd end
+
+    local p = b.placeable
+    if p.getClusters == nil then return rows, herd end
+    local okC, clusters = pcall(p.getClusters, p)
+    if not okC or type(clusters) ~= "table" then return rows, herd end
+
+    local free = 0
+    if p.getNumOfFreeAnimalSlots ~= nil then
+        local okF, f = pcall(p.getNumOfFreeAnimalSlots, p)
+        if okF and type(f) == "number" then free = f end
+    end
+    -- free slots are consumed by the clusters in order (PlaceableHusbandryAnimals
+    -- :onPeriodChanged decrements as it goes), so the same order is walked here
+    local remaining = free
+
+    for _, cl in pairs(clusters) do
+        local n     = cl.numAnimals or 0
+        local age   = cl.age or 0
+        local hp    = cl.health or 0            -- 0..100
+        local st    = subTypeOf(cl.subTypeIndex)
+        local each  = nil
+        if cl.getSellPrice ~= nil then
+            local okP, v = pcall(cl.getSellPrice, cl)
+            if okP and type(v) == "number" then each = v end
+        end
+        local total = (each ~= nil) and (each * n) or nil
+
+        -- what the SAME animals would fetch fed properly. price scales exactly
+        -- 0.40 + 0.60h (CLAUDE.md 11.1), so the full health figure is a ratio of
+        -- the current one and needs no price curve.
+        local hFactor = 0.40 + 0.60 * (hp / 100)
+        local full = (each ~= nil and hFactor > 0) and (each / hFactor * n) or nil
+
+        local minAge  = st ~= nil and st.reproductionMinAgeMonth or nil
+        local minH    = st ~= nil and st.reproductionMinHealth or nil
+        local dur     = st ~= nil and st.reproductionDurationMonth or nil
+        local repro   = cl.reproduction or 0
+
+        local status, birth = l10n("ar_st_breeding", "Breeding"), "-"
+        local warn = false
+        if minAge ~= nil and age < minAge then
+            status = string.format(l10n("ar_st_tooYoung", "Too young (%d mo)"), minAge)
+            birth  = l10n("ar_birth_paused", "paused")
+        elseif minH ~= nil and (hp / 100) < minH then
+            status = string.format(l10n("ar_st_lowHealth", "Health below %d%%"),
+                                   math.floor(minH * 100 + 0.5))
+            birth  = l10n("ar_birth_paused", "paused")
+            warn   = true
+            herd.lowHealth = herd.lowHealth + n
+        else
+            -- it WILL breed. Does the pen have room for one offspring per animal?
+            if n > remaining then
+                status = string.format(l10n("ar_st_noRoom", "NO ROOM: %d lost"), n - remaining)
+                warn   = true
+                herd.noRoom = herd.noRoom + (n - remaining)
+            end
+            herd.breeding = herd.breeding + n
+            herd.births   = herd.births + n
+            if dur ~= nil and dur > 0 then
+                local step = 100 / dur
+                local need = math.max(0, 100 - repro)
+                local periods = math.ceil(need / step)
+                if periods <= 0 then periods = 1 end
+                birth = string.format(l10n("ar_birth_in", "in %d mo"), periods)
+            end
+            remaining = math.max(0, remaining - n)
+        end
+        herd.value = herd.value + (total or 0)
+        herd.atFullHealth = herd.atFullHealth + (full or 0)
+
+        rows[#rows + 1] = {
+            animal = (st ~= nil and tostring(st.name) or "?"),
+            count  = n,
+            age    = age,
+            healthPct = hp,          -- RAW 0..100, unlike the barn's 0..1 factor
+            each   = each,
+            total  = total,
+            birth  = birth,
+            status = status,
+            warn   = warn,
+        }
+    end
+
+    table.sort(rows, function(x, y)
+        if x.animal ~= y.animal then return x.animal < y.animal end
+        return (x.age or 0) > (y.age or 0)
+    end)
+    return rows, herd
+end
+
+---SCAFFOLDING. These are the decision inputs the sell rules will read; the rules
+-- themselves are not written. Stated as facts rather than settings so the view
+-- is honest about being unfinished instead of showing controls that do nothing.
+function AnimalReduxPage:buildTradeRows(b, herd)
+    local rows = {}
+    local function row(factor, value, meaning, warn)
+        rows[#rows + 1] = { factor = factor, value = value, meaning = meaning, warn = warn }
+    end
+    if b == nil then return rows end
+
+    local free = (b.maxAnimals or 0) - (b.numAnimals or 0)
+    if free < 0 then free = 0 end
+
+    row(l10n("ar_tr_capacity", "Pen capacity"),
+        string.format("%d / %d", b.numAnimals or 0, b.maxAnimals or 0),
+        string.format(l10n("ar_tr_capacityM", "%d free slot(s)"), free), free == 0)
+
+    row(l10n("ar_tr_births", "Births next cycle"),
+        string.format("%d", herd.births or 0),
+        (herd.births or 0) == 0
+            and l10n("ar_tr_birthsNone", "nothing is breeding right now")
+            or ((herd.noRoom or 0) > 0
+                and string.format(l10n("ar_tr_birthsLost",
+                    "%d would be DISCARDED, and the gestation spent with them"),
+                    herd.noRoom)
+                or l10n("ar_tr_birthsFit", "the pen has room for all of them")),
+        (herd.noRoom or 0) > 0)
+
+    -- THE GATE IS PER CLUSTER, so an AVERAGE cannot answer it: a barn of 200
+    -- healthy animals and 10 starving ones averages well above 0.75 while ten
+    -- animals are gated. The average is still shown, because it is what the herd
+    -- is worth (price scales on each animal's own health), but the VERDICT comes
+    -- from the per cluster pass, which counts the animals actually gated.
+    local gated = herd.lowHealth or 0
+    row(l10n("ar_tr_health", "Herd health"),
+        string.format("%d%%", math.floor((b.health or 0) * 100 + 0.5)),
+        gated > 0
+            and string.format(l10n("ar_tr_healthLow",
+                "%d animal(s) below the 75%% breeding gate: paused, but NOT losing progress"),
+                gated)
+            or l10n("ar_tr_healthOk", "every animal is above the 75% breeding gate"),
+        gated > 0)
+
+    row(l10n("ar_tr_value", "Herd value now"),
+        money(herd.value),
+        l10n("ar_tr_valueM", "what the whole barn would fetch at today's health"), false)
+
+    local gap = (herd.atFullHealth or 0) - (herd.value or 0)
+    row(l10n("ar_tr_valueFull", "Value at full health"),
+        money(herd.atFullHealth),
+        gap > 1
+            and string.format(l10n("ar_tr_valueGap", "%s recoverable by feeding alone"), money(gap))
+            or l10n("ar_tr_valueNoGap", "already at full value"),
+        gap > 1)
+
+    -- ---- WHAT THE RULES WOULD DO ---------------------------------------
+    -- READ ONLY. Nothing here sells anything: the plan is computed and shown, and
+    -- the player acts through Buy / Sell, which opens the game's own screen.
+    local plan = nil
+    if AnimalSellRules ~= nil and AnimalSellRules.plan ~= nil and b.placeable ~= nil then
+        local okP, pl = pcall(AnimalSellRules.plan, b.placeable, nil)
+        if okP and type(pl) == "table" then plan = pl end
+    end
+    if plan == nil then
+        -- The engine is a separate sourceFile and could be absent or have thrown.
+        -- Say so rather than quietly showing five facts and no recommendation --
+        -- an absent verdict is indistinguishable from "nothing to do".
+        row(l10n("ar_tr_rules", "Sell rules"),
+            l10n("ar_tr_rulesNA", "unavailable"),
+            l10n("ar_tr_rulesNAM", "the sell rules module did not load, so no recommendation is shown"),
+            true)
+        return rows
+    end
+
+    for _, ln in ipairs(plan.lines or {}) do
+        local headroom = (ln.reason == AnimalSellRules.REASON_HEADROOM)
+        row(string.format(l10n("ar_tr_sell", "SELL %d x %s"), ln.count, ln.name),
+            money(ln.revenue),
+            headroom
+                and l10n("ar_tr_whyHeadroom",
+                    "headroom: these slots are needed or next cycle's births are destroyed")
+                or l10n("ar_tr_whyPeak",
+                    "past peak: worth less every month it is kept, and holding gains nothing"),
+            headroom)
+    end
+
+    if (plan.total or 0) > 0 then
+        row(l10n("ar_tr_total", "Recommended total"),
+            string.format(l10n("ar_tr_totalHead", "%d head"), plan.total),
+            string.format(l10n("ar_tr_totalM", "%s at today's prices"), money(plan.revenue)),
+            false)
+    else
+        row(l10n("ar_tr_total", "Recommended total"),
+            l10n("ar_tr_nothing", "sell nothing"),
+            l10n("ar_tr_nothingM", "the pen has room and nothing is past its peak"),
+            false)
+    end
+
+    -- Notes carry FIGURES, not sentences -- the engine is pure and does not know
+    -- what language this is. Formatting and localising them is the GUI's job.
+    for _, n in ipairs(plan.notes or {}) do
+        local text, warn = nil, false
+        if n.kind == "held" then
+            text = string.format(l10n("ar_tr_noteHeld",
+                "peak sales held: at %d%% health these would realise %d%% of book value"),
+                n.healthPct or 0, n.realisePct or 0)
+        elseif n.kind == "blocked" then
+            text = string.format(l10n("ar_tr_noteBlocked",
+                "still %d slot(s) short: the breeder floor of %d blocks any further sale"),
+                n.short or 0, n.keepBreeders or 0)
+            warn = true
+        elseif n.kind == "info" then
+            text = string.format(l10n("ar_tr_noteLost",
+                "%d birth(s) would still be discarded next cycle"), n.lost or 0)
+            warn = true
+        end
+        if text ~= nil then row(l10n("ar_tr_note", "Note"), "", text, warn) end
+    end
+
+    row(l10n("ar_tr_rules", "Sell rules"),
+        l10n("ar_tr_rulesValue", "read only"),
+        l10n("ar_tr_rulesM",
+            "nothing is sold automatically. Buy / Sell opens the game's own screen for this barn."),
+        false)
+    return rows
+end
+
+-- ============================================================================
+-- VIEWS. One tab, one barn list, three right hand panes.
+--
+-- The left pane never changes: all three views answer a question about the SAME
+-- selected barn, so they are not peers of it, they are children of it. Three
+-- separate TABS would have meant three copies of the barn list with a different
+-- right hand side, which is a view switch pretending to be navigation.
+--
+-- Mechanically this follows DR's Overview (its Show Settings / Show Flows
+-- toggle): a second and third header + list declared in the XML, swapped by
+-- setVisible, with activeList() as the SINGLE place that decides which one
+-- reloads so the panes cannot drift apart. _realtimeLists follows the toggle, or
+-- DR's paced refresh keeps repopulating a hidden pane.
+-- ============================================================================
+
+AnimalReduxPage.VIEW_FEED, AnimalReduxPage.VIEW_CLUSTERS, AnimalReduxPage.VIEW_TRADE = 1, 2, 3
+
+function AnimalReduxPage:viewIndexSafe()
+    local v = self.viewIndex
+    if type(v) ~= "number" or v < 1 or v > 3 then return AnimalReduxPage.VIEW_FEED end
+    return v
+end
+
+function AnimalReduxPage:initViewOption()
+    self.viewIndex = self:viewIndexSafe()
+    local o = self.viewOption
+    if o == nil or o.setTexts == nil then return end
+    o:setTexts({
+        l10n("ar_view_feed",     "View: Feed"),
+        l10n("ar_view_clusters", "View: Animals"),
+        l10n("ar_view_trade",    "View: Trade"),
+    })
+    if o.setState ~= nil then pcall(function() o:setState(self.viewIndex) end) end
+end
+
+function AnimalReduxPage:onViewChanged(state)
+    local o = self.viewOption
+    if type(state) ~= "number" and o ~= nil and o.getState ~= nil then state = o:getState() end
+    if type(state) == "number" and state >= 1 and state <= 3 then self.viewIndex = state end
+    self:applyView()
+end
+
+---The one place that decides which list is on screen. Every reload goes through
+-- it, so the three panes cannot get out of step with the selector.
+function AnimalReduxPage:activeList()
+    local v = self:viewIndexSafe()
+    if v == AnimalReduxPage.VIEW_CLUSTERS then return self.clusterList end
+    if v == AnimalReduxPage.VIEW_TRADE then return self.tradeList end
+    return self.groupList
+end
+
+function AnimalReduxPage:applyView()
+    local v = self:viewIndexSafe()
+    local feed  = (v == AnimalReduxPage.VIEW_FEED)
+    local clust = (v == AnimalReduxPage.VIEW_CLUSTERS)
+    local trade = (v == AnimalReduxPage.VIEW_TRADE)
+
+    local function vis(el, show)
+        if el ~= nil and el.setVisible ~= nil then pcall(function() el:setVisible(show) end) end
+    end
+    -- the FEED view is two stacked tables; both halves move together
+    vis(self.feedHeaderRow,    feed)
+    vis(self.groupList,        feed)
+    vis(self.condHeaderRow,    feed)
+    vis(self.conditionList,    feed)
+    vis(self.clusterHeaderRow, clust)
+    vis(self.clusterList,      clust)
+    vis(self.tradeHeaderRow,   trade)
+    vis(self.tradeList,        trade)
+
+    -- DR's paced refresh repopulates whatever is in here. Leaving a hidden
+    -- pane listed would pay for cells nobody can see.
+    if feed then
+        self._realtimeLists = { "barnList", "groupList", "conditionList" }
+    elseif clust then
+        self._realtimeLists = { "barnList", "clusterList" }
+    else
+        self._realtimeLists = { "barnList", "tradeList" }
+    end
+
+    self:updateViewButtons()
+    self:rebuild()
+    if self.barnList ~= nil then self.barnList:reloadData() end
+    local l = self:activeList()
+    if l ~= nil then l:reloadData() end
+    -- the feed view's SECOND table is not the active list and would otherwise
+    -- keep whatever the previous barn left in it
+    if feed and self.conditionList ~= nil then self.conditionList:reloadData() end
+    self:updateSummary()
+end
+
+---Buy / Sell belongs to the Trade view alone. The footer is re-assigned rather
+-- than relabelled, so the other two views are not carrying a button that would
+-- open a screen having nothing to do with what is on them.
+function AnimalReduxPage:updateViewButtons()
+    local all = self._allButtons
+    if all == nil or self.applyFooterButtons == nil then return end
+    local trade = (self:viewIndexSafe() == AnimalReduxPage.VIEW_TRADE)
+    local vis = {}
+    for _, b in ipairs(all) do
+        if b._role ~= "buySell" or trade then vis[#vis + 1] = b end
+    end
+    self:applyFooterButtons(vis)
+end
+
+---Open the BASE GAME's own animal screen for the selected barn.
+--
+-- CONFIRMED IN GAME: setController(husbandry, nil, true) then
+-- showGui("AnimalScreen") opens the dealer screen scoped to that barn, with a
+-- buy tab and a sell tab. So there is nothing to reimplement: no price table,
+-- no money handling, no multiplayer event.
+--
+-- setController is pcall'd and the screen is shown ONLY if it succeeded. A half
+-- set controller followed by a shown screen is how a GUI ends up throwing on
+-- every frame, and an extension must not be able to do that to the game.
+function AnimalReduxPage:onBuySell()
+    local b = self.barns ~= nil and self.barns[self.selectedBarn] or nil
+    if b == nil or b.placeable == nil then return end
+    if g_animalScreen == nil or g_animalScreen.setController == nil then return end
+    local ok = pcall(function() g_animalScreen:setController(b.placeable, nil, true) end)
+    if not ok then return end
+    if g_gui ~= nil and g_gui.showGui ~= nil then pcall(g_gui.showGui, g_gui, "AnimalScreen") end
+end
+
+-- ---------------------------------------------------------------------------
 -- FRAME
 -- ---------------------------------------------------------------------------
 function AnimalReduxPage:onGuiSetupFinished()
     AnimalReduxPage:superClass().onGuiSetupFinished(self)
-    for _, id in ipairs({ "barnList", "groupList", "conditionList" }) do
+    for _, id in ipairs({ "barnList", "groupList", "conditionList",
+                          "clusterList", "tradeList" }) do
         local list = self[id]
         if list ~= nil then
             list:setDataSource(self)
@@ -364,24 +790,67 @@ end
 
 function AnimalReduxPage:onFrameOpen()
     AnimalReduxPage:superClass().onFrameOpen(self)
-    -- DR's base page re-populates these on its own paced tick, so the figures
-    -- stay live without this page running a timer of its own.
-    self._realtimeLists = { "barnList", "groupList", "conditionList" }
-    self:rebuild()
-    if self.barnList ~= nil then self.barnList:reloadData() end
-    if self.groupList ~= nil then self.groupList:reloadData() end
-    if self.conditionList ~= nil then self.conditionList:reloadData() end
-    self:updateSummary()
+    -- applyView sets _realtimeLists (DR's paced tick repopulates whatever is in
+    -- it), rebuilds, reloads and re-applies the footer -- so the view the player
+    -- last chose survives leaving and re-entering the tab.
+    self:initViewOption()
+    self:applyView()
 end
 
 -- ---- SmoothList delegate (two lists, told apart by identity) ---------------
 function AnimalReduxPage:getNumberOfItemsInSection(list, section)
     if list == self.barnList then return #(self.barns or {}) end
     if list == self.conditionList then return #(self.conds or {}) end
+    if list == self.clusterList then return #(self.clusterRows or {}) end
+    if list == self.tradeList then return #(self.tradeRows or {}) end
     return #(self.rows or {})
 end
 
 function AnimalReduxPage:populateCellForItemInSection(list, section, index, cell)
+    -- EVERY cell is written on EVERY path, colour included. SmoothList RECYCLES
+    -- cells, so a row that skips a field inherits whatever the previous row left
+    -- there -- the trap DR hit twice, once with figures and once with colours.
+    if list == self.clusterList then
+        local r = (self.clusterRows or {})[index]
+        if r == nil then return end
+        local function setc(name, text, warn)
+            local c = cell:getAttribute(name)
+            if c == nil then return end
+            if c.setText ~= nil then c:setText(text or "") end
+            setColour(c, warn and 0 or 1)
+        end
+        setc("clAnimal", r.animal)
+        setc("clCount",  string.format("%d", r.count or 0))
+        setc("clAge",    string.format(l10n("ar_fmt_months", "%d mo"), r.age or 0))
+        -- health drives up to 60% of the sale price AND gates breeding at 75%,
+        -- so it is amber below the gate rather than only at zero
+        local hc = cell:getAttribute("clHealth")
+        if hc ~= nil then
+            if hc.setText ~= nil then hc:setText(string.format("%d%%", r.healthPct or 0)) end
+            setColour(hc, ((r.healthPct or 0) / 100 >= 0.75) and 1 or 0.5)
+        end
+        setc("clEach",   r.each ~= nil and money(r.each) or "-")
+        setc("clTotal",  r.total ~= nil and money(r.total) or "-")
+        setc("clBirth",  r.birth)
+        setc("clStatus", r.status, r.warn)
+        return
+    end
+
+    if list == self.tradeList then
+        local r = (self.tradeRows or {})[index]
+        if r == nil then return end
+        local function setc(name, text, warn)
+            local c = cell:getAttribute(name)
+            if c == nil then return end
+            if c.setText ~= nil then c:setText(text or "") end
+            setColour(c, warn and 0 or 1)
+        end
+        setc("trFactor",  r.factor)
+        setc("trValue",   r.value,   r.warn)
+        setc("trMeaning", r.meaning, r.warn)
+        return
+    end
+
     if list == self.barnList then
         local b = (self.barns or {})[index]
         if b == nil then return end
@@ -511,10 +980,27 @@ function AnimalReduxPage.install(menu)
     --
     -- The icon is a base-game slice, which is why DR's helper is used rather than
     -- TabbedMenu:addPage: that one takes a texture file and UVs instead.
+    -- Back plus Buy / Sell. Both are registered up front because the footer set
+    -- is fixed at install time; updateViewButtons then FILTERS it per view, so
+    -- Buy / Sell appears on the Trade view alone rather than sitting on the Feed
+    -- view offering to open a screen unrelated to what is on it.
+    local buttons = {
+        SD.API.menuBackButton(menu),
+        {
+            inputAction = InputAction.MENU_EXTRA_1,
+            text = l10n("ar_btn_buySell", "Buy / Sell"),
+            callback = function()
+                local pg = AnimalReduxPage._page
+                if pg ~= nil and pg.onBuySell ~= nil then pg:onBuySell() end
+            end,
+            _role = "buySell",
+        },
+    }
+
     local ok = SD.API.addMenuPage(menu, page, nil, "gui.icon_ingameMenu_animals",
                                   l10n("ar_tab_animals", "Animal Redux"),
                                   function() return true end,
-                                  { SD.API.menuBackButton(menu) })
+                                  buttons)
     if not ok then return false, "addMenuPage refused" end
 
     AnimalReduxPage._page = page

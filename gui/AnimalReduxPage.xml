@@ -49,14 +49,25 @@
             </ListItem>
         </SmoothList>
 
-        <!-- RIGHT: summary strip for the selected barn -->
+        <!-- RIGHT: the VIEW SELECTOR and the summary strip, sharing one row.
+             The selector deliberately sits INSIDE the existing strip rather than
+             taking a row of its own: a new 46px row would push the whole
+             right hand column down and cost the condition list a visible line,
+             and every table below is hand tiled to end at exactly y=810.
+             16 + 300 = 316 | 330 + 744 = 1074 -->
         <Bitmap profile="SDList" position="390px -46px" size="1090px 40px">
-            <Text profile="SDRowCell" position="16px 0px" size="1058px 40px" textSize="15px"
+            <Bitmap profile="fs25_multiTextOptionContainer" position="16px 0px" size="300px 40px"
+                    imageColor="0 0 0 0">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="viewOption"
+                                 onClick="onViewChanged"
+                                 textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+            <Text profile="SDRowCell" position="330px 0px" size="744px 40px" textSize="15px"
                   id="summaryLine" text=""/>
         </Bitmap>
 
         <!-- RIGHT: one row per food group -->
-        <Bitmap profile="SDList" position="390px -92px" size="1090px 40px">
+        <Bitmap profile="SDList" id="feedHeaderRow" position="390px -92px" size="1090px 40px">
             <Text profile="SDHeaderLeft"  position="16px 0px"  size="190px 40px" textSize="11px"
                   text="$l10n_ar_col_group"/>
             <Text profile="SDHeaderRight" position="214px 0px" size="100px 40px" textSize="11px"
@@ -99,7 +110,7 @@
              and a backed-up output store without this mod knowing anything about
              them, and a modded husbandry's own entries come along for free.
              16 + 320 = 336 | 344 + 150 = 494 | 502 + 110 = 612 -->
-        <Bitmap profile="SDList" position="390px -476px" size="1090px 40px">
+        <Bitmap profile="SDList" id="condHeaderRow" position="390px -476px" size="1090px 40px">
             <Text profile="SDHeaderLeft"  position="16px 0px"  size="320px 40px" textSize="11px"
                   text="$l10n_ar_col_condition"/>
             <Text profile="SDHeaderRight" position="344px 0px" size="150px 40px" textSize="11px"
@@ -117,6 +128,97 @@
                       name="condValue"/>
                 <Text profile="SDRowCellR" position="502px 0px" size="110px 42px" textSize="12px"
                       name="condRatio"/>
+            </ListItem>
+        </SmoothList>
+
+        <!-- ================= CLUSTERS view (hidden until selected) =========
+             A cluster is NOT an animal. In the base game one cluster is a
+             homogeneous GROUP sharing an age, a health and a price: 250 chickens
+             are ONE row. Under RealisticLivestock it is one row per animal, which
+             is why this view stands down when RL is present rather than drawing
+             hundreds of rows RL already draws better.
+
+             NEXT BIRTH is the measured model: reproduction climbs by
+             100/durationMonth each period and the whole cluster births at 100,
+             one offspring PER ANIMAL. So a breeding cluster DOUBLES, and the
+             pen must have that much room or the calves are discarded and the
+             gestation is spent with them.
+
+             16 + 230 = 246 | 254 + 80 = 334 | 342 + 80 = 422 | 430 + 90 = 520
+             528 + 110 = 638 | 646 + 130 = 776 | 784 + 140 = 924 | 932 + 142 = 1074 -->
+        <Bitmap profile="SDList" id="clusterHeaderRow" position="390px -92px" size="1090px 40px"
+                visible="false">
+            <Text profile="SDHeaderLeft"  position="16px 0px"  size="230px 40px" textSize="11px"
+                  text="$l10n_ar_col_animal"/>
+            <Text profile="SDHeaderRight" position="254px 0px" size="80px 40px"  textSize="11px"
+                  text="$l10n_ar_col_count"/>
+            <Text profile="SDHeaderRight" position="342px 0px" size="80px 40px"  textSize="11px"
+                  text="$l10n_ar_col_age"/>
+            <Text profile="SDHeaderRight" position="430px 0px" size="90px 40px"  textSize="11px"
+                  text="$l10n_ar_col_healthPct"/>
+            <Text profile="SDHeaderRight" position="528px 0px" size="110px 40px" textSize="11px"
+                  text="$l10n_ar_col_valueEach"/>
+            <Text profile="SDHeaderRight" position="646px 0px" size="130px 40px" textSize="11px"
+                  text="$l10n_ar_col_valueTotal"/>
+            <Text profile="SDHeaderLeft"  position="784px 0px" size="140px 40px" textSize="11px"
+                  text="$l10n_ar_col_nextBirth"/>
+            <Text profile="SDHeaderLeft"  position="932px 0px" size="142px 40px" textSize="11px"
+                  text="$l10n_ar_col_status"/>
+            <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <SmoothList profile="SDList" id="clusterList" position="390px -136px" size="1090px 674px"
+                    visible="false" focusChangeTop="nil" focusChangeBottom="nil">
+            <ListItem profile="SDListItemStats" name="rowTemplate" size="1090px 42px">
+                <Text profile="SDRowCell"  position="16px 0px"  size="230px 42px" textSize="12px"
+                      name="clAnimal"/>
+                <Text profile="SDRowCellR" position="254px 0px" size="80px 42px"  textSize="12px"
+                      name="clCount"/>
+                <Text profile="SDRowCellR" position="342px 0px" size="80px 42px"  textSize="12px"
+                      name="clAge"/>
+                <Text profile="SDRowCellR" position="430px 0px" size="90px 42px"  textSize="12px"
+                      name="clHealth"/>
+                <Text profile="SDRowCellR" position="528px 0px" size="110px 42px" textSize="12px"
+                      name="clEach"/>
+                <Text profile="SDRowCellR" position="646px 0px" size="130px 42px" textSize="12px"
+                      name="clTotal"/>
+                <Text profile="SDRowCell"  position="784px 0px" size="140px 42px" textSize="12px"
+                      name="clBirth"/>
+                <Text profile="SDRowCell"  position="932px 0px" size="142px 42px" textSize="12px"
+                      name="clStatus"/>
+            </ListItem>
+        </SmoothList>
+
+        <!-- ================= TRADE view (hidden until selected) ============
+             SCAFFOLDING. The rows are the per barn facts the sell rules will be
+             built from, read live; the rules themselves are not written yet.
+
+             The transaction is deliberately NOT reimplemented here. The base
+             game already has a per barn buy AND sell screen, confirmed in game:
+             setController(husbandry, nil, true) then showGui("AnimalScreen")
+             opens it with a buy tab and a sell tab. The footer button does that
+             and nothing else, so there is no money handling, no multiplayer
+             event and nothing borrowed from any other mod.
+
+             16 + 300 = 316 | 324 + 220 = 544 | 552 + 522 = 1074 -->
+        <Bitmap profile="SDList" id="tradeHeaderRow" position="390px -92px" size="1090px 40px"
+                visible="false">
+            <Text profile="SDHeaderLeft"  position="16px 0px"  size="300px 40px" textSize="11px"
+                  text="$l10n_ar_col_factor"/>
+            <Text profile="SDHeaderRight" position="324px 0px" size="220px 40px" textSize="11px"
+                  text="$l10n_ar_col_value"/>
+            <Text profile="SDHeaderLeft"  position="552px 0px" size="522px 40px" textSize="11px"
+                  text="$l10n_ar_col_meaning"/>
+            <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <SmoothList profile="SDList" id="tradeList" position="390px -136px" size="1090px 674px"
+                    visible="false" focusChangeTop="nil" focusChangeBottom="nil">
+            <ListItem profile="SDListItemStats" name="rowTemplate" size="1090px 42px">
+                <Text profile="SDRowCell"  position="16px 0px"  size="300px 42px" textSize="12px"
+                      name="trFactor"/>
+                <Text profile="SDRowCellR" position="324px 0px" size="220px 42px" textSize="12px"
+                      name="trValue"/>
+                <Text profile="SDRowCell"  position="552px 0px" size="522px 42px" textSize="12px"
+                      name="trMeaning"/>
             </ListItem>
         </SmoothList>
     </GuiElement>

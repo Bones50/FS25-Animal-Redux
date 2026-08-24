@@ -82,5 +82,75 @@
         <text name="ar_sum_health"         text=" at %d%% health"/>
         <text name="ar_sum_prod"           text="   -  PRODUCTIVITY %d%%"/>
         <text name="ar_sum_grazes"         text="   -  GRAZES A MEADOW: pasture grass feeds these animals without appearing in the trough"/>
+
+        <!-- VIEW SELECTOR. Three states in one 300px control: keep them SHORT,
+             budget about 18 characters each including the "View: " prefix. -->
+        <text name="ar_view_feed"          text="View: Feed"/>
+        <text name="ar_view_clusters"      text="View: Animals"/>
+        <text name="ar_view_trade"         text="View: Trade"/>
+        <text name="ar_btn_buySell"        text="Buy / Sell"/>
+
+        <!-- ANIMALS view. A row is a CLUSTER, a group of animals sharing an age,
+             a health and a price, NOT one animal. Column budgets at 11px:
+             animal 38, count 13, age 13, health 15, value each 18,
+             value total 21, next birth 23, status 23. -->
+        <text name="ar_col_animal"         text="ANIMAL"/>
+        <text name="ar_col_count"          text="COUNT"/>
+        <text name="ar_col_age"            text="AGE"/>
+        <text name="ar_col_healthPct"      text="HEALTH"/>
+        <text name="ar_col_valueEach"      text="VALUE EACH"/>
+        <text name="ar_col_valueTotal"     text="VALUE TOTAL"/>
+        <text name="ar_col_nextBirth"      text="NEXT BIRTH"/>
+        <text name="ar_col_status"         text="STATUS"/>
+
+        <text name="ar_fmt_months"         text="%d mo"/>
+        <text name="ar_birth_in"           text="in %d mo"/>
+        <text name="ar_birth_paused"       text="paused"/>
+        <text name="ar_st_breeding"        text="Breeding"/>
+        <text name="ar_st_tooYoung"        text="Too young (%d mo)"/>
+        <text name="ar_st_lowHealth"       text="Health below %d%%"/>
+        <text name="ar_st_noRoom"          text="NO ROOM: %d lost"/>
+
+        <!-- TRADE view. Scaffolding: these are the facts the sell rules will be
+             built from. Budgets at 12px: factor 50, value 30, meaning 87. -->
+        <text name="ar_col_factor"         text="FACTOR"/>
+        <text name="ar_col_value"          text="VALUE"/>
+        <text name="ar_col_meaning"        text="WHAT IT MEANS"/>
+
+        <text name="ar_tr_capacity"        text="Pen capacity"/>
+        <text name="ar_tr_capacityM"       text="%d free slot(s)"/>
+        <text name="ar_tr_births"          text="Births next cycle"/>
+        <text name="ar_tr_birthsNone"      text="nothing is breeding right now"/>
+        <text name="ar_tr_birthsFit"       text="the pen has room for all of them"/>
+        <text name="ar_tr_birthsLost"      text="%d would be DISCARDED, and the gestation spent with them"/>
+        <text name="ar_tr_health"          text="Herd health"/>
+        <text name="ar_tr_healthLow"       text="%d animal(s) below the 75%% breeding gate: paused, but NOT losing progress"/>
+        <text name="ar_tr_healthOk"        text="every animal is above the 75% breeding gate"/>
+        <text name="ar_tr_value"           text="Herd value now"/>
+        <text name="ar_tr_valueM"          text="what the whole barn would fetch at today's health"/>
+        <text name="ar_tr_valueFull"       text="Value at full health"/>
+        <text name="ar_tr_valueGap"        text="%s recoverable by feeding alone"/>
+        <text name="ar_tr_valueNoGap"      text="already at full value"/>
+        <text name="ar_tr_rules"           text="Sell rules"/>
+        <text name="ar_tr_rulesValue"      text="read only"/>
+        <text name="ar_tr_rulesM"          text="nothing is sold automatically. Buy / Sell opens the game's own screen for this barn."/>
+
+        <!-- The recommendation the rules produce, read only. WHAT IT MEANS is the
+             widest column (about 87 characters at 12px) and carries the reason a
+             sale is advised, which is the whole point of the view. -->
+        <text name="ar_tr_sell"            text="SELL %d x %s"/>
+        <text name="ar_tr_whyHeadroom"     text="headroom: these slots are needed or next cycle's births are destroyed"/>
+        <text name="ar_tr_whyPeak"         text="past peak: worth less every month it is kept, and holding gains nothing"/>
+        <text name="ar_tr_total"           text="Recommended total"/>
+        <text name="ar_tr_totalHead"       text="%d head"/>
+        <text name="ar_tr_totalM"          text="%s at today's prices"/>
+        <text name="ar_tr_nothing"         text="sell nothing"/>
+        <text name="ar_tr_nothingM"        text="the pen has room and nothing is past its peak"/>
+        <text name="ar_tr_note"            text="Note"/>
+        <text name="ar_tr_rulesNA"         text="unavailable"/>
+        <text name="ar_tr_rulesNAM"        text="the sell rules module did not load, so no recommendation is shown"/>
+        <text name="ar_tr_noteHeld"        text="peak sales held: at %d%% health these would realise %d%% of book value"/>
+        <text name="ar_tr_noteBlocked"     text="still %d slot(s) short: the breeder floor of %d blocks any further sale"/>
+        <text name="ar_tr_noteLost"        text="%d birth(s) would still be discarded next cycle"/>
     </texts>
 </l10n>
