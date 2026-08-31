@@ -1,0 +1,482 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!-- Herd Inspector: the second Animals tab.
+     GROUPS  every animal group on the farm, filtered by type. Full width, no
+             barn list: the BARN column already says where each group is.
+     BARN    barn list left; a summary strip, then that barn's groups beside its
+             feed and production.
+
+     THE ROOT STRUCTURE IS THE BASE GAME'S AND MUST STAY THAT WAY. It was copied
+     from the original Animal Redux page, which has since been retired (20.28) -
+     so this file is now the only record of the shape, and the reason it has to
+     be this shape is below.
+     The first build invented a root (profile="emptyPanel" over
+     fs25_ingameMenuFrame) and two profiles that do not exist - SDPageTitle and
+     SDSelector - and an unknown profile does not error, it falls back to a
+     default with no positioning. The page rendered with its title in the middle
+     of the screen and every table off its origin. DR defines SDList /
+     SDListItem* / SDRowCell* / SDHeader*; the fs25_ ones are the base game's.
+     If a profile is not in one of those two sets, it does not exist.
+
+     An XML comment may not contain a double hyphen: it is a parse error and FS25
+     responds by not loading the page at all (DR 5.10 / 5.60 / 5.77 / 5.80).
+
+     BOTH VIEWS SHARE THIS FILE, toggled by visibility rather than by moving
+     cells at runtime - that would mean px to normalised arithmetic on a live
+     layout, declined for the same reason in DR 5.33 and 6.15.
+
+     Vertical budget, right pane, ending at exactly 810:
+       -46  selectors (40)
+       GROUPS   header -92 (40) | list -136 (674)
+       BARN     panel  -92 (40) | strip -136 (146)
+                THE CONTENT STARTS AT x=205, NOT 390. The barn list was halved to
+                185px and the tables were left where they were, which stranded a
+                205px column of nothing between them - visible in a screenshot
+                2026-08-31 as the widest blank on the page. 185 + 20 gutter = 205,
+                the same 20px gutter DR's own pages use between list and tables.
+                left  x=205 w=680   animals -286 (40) | list -330 (480)
+                right x=893 w=587   feed    -286 (40) | list -330 (260)
+                                    outputs -624 (40) | list -666 (144)
+                Both columns end at -810, so the animals list and the outputs list
+                finish on the same line. Outputs sits under FEED, aligned to it -
+                same x, same width - which reads "what goes in, then what comes
+                out"; it was briefly moved left and that broke the pairing.
+                EVERY LIST HAS A SCROLLBAR. Each sits in a GuiElement alongside a
+                fs25_listSliderBox anchored to the wrapper's right edge, the shape
+                DR's own pages use - and the WRAPPER carries the visibility, or a
+                hidden list would leave its slider drawn beside nothing. The 12px
+                slider lives in each table's right margin, so no column moved for
+                it except the barn name, which had only 6px to give.
+-->
+<GUI name="herdInspectorPage">
+    <GuiElement profile="fs25_menuContainer">
+        <GuiElement profile="fs25_menuHeaderPanel">
+            <Bitmap profile="fs25_menuHeaderIconBg">
+                <Bitmap profile="fs25_menuHeaderIcon" imageSliceId="gui.icon_ingameMenu_statistics"/>
+            </Bitmap>
+            <!-- THE TITLE FOLLOWS THE VIEW. The XML text is the GROUPS title, so a
+                 build where the Lua never runs still shows a real heading rather
+                 than a raw key. -->
+            <Text profile="fs25_menuHeaderTitle" text="$l10n_ar_hi_page_title" id="pageTitle"/>
+        </GuiElement>
+
+        <!-- The selectors, in one 40px strip.
+             PERIOD comes SECOND because it applies to every view, while the filter
+             belongs to the GROUPS view alone and is hidden with it - so on the barn
+             view the two visible selectors sit together with no gap between them.
+             16 + 300 = 316 | 330 + 300 = 630 | 644 + 300 = 944 -->
+        <Bitmap profile="SDList" position="0px -46px" size="1480px 40px">
+            <Bitmap profile="fs25_multiTextOptionContainer" position="16px 0px" size="300px 40px"
+                    imageColor="0 0 0 0">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="viewOption"
+                                 onClick="onViewChanged"
+                                 textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+            <!-- EVERY RATE ON THE PAGE IS QUOTED PER THIS. The column headers carry no
+                 unit of their own (DR 5.11 dropped its "/mo" suffixes for the same
+                 reason): one legend for the whole page beats eight headers that have
+                 to be re-tiled every time the period changes. -->
+            <Bitmap profile="fs25_multiTextOptionContainer" position="330px 0px" size="300px 40px"
+                    imageColor="0 0 0 0">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="periodOption"
+                                 onClick="onPeriodChanged"
+                                 textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" id="filterBox" position="644px 0px"
+                    size="300px 40px" imageColor="0 0 0 0" visible="false">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="filterOption"
+                                 onClick="onFilterChanged"
+                                 textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+        </Bitmap>
+
+        <!-- ============================================================
+             VIEW 1: GROUPS  -  FULL WIDTH (0..1480).
+             It used to start at 390 because the BARN view's building list lives
+             there; this view has no left column at all, so a third of the screen
+             was empty and the table was cramped into the rest. The barn header and
+             list moved down one row (-46 to -92) so the selector strip above them
+             can span the page too, which also lines the list up with the panel.
+
+             RECOMMENDATION is the widest column and sits LAST, because it is the
+             conclusion the ones before it argue for: the eye reads the facts, then
+             the verdict. 204px at 12px is about 34 characters, which is the budget
+             every string in REC_TEXT is written to.
+             The width came off the columns that had slack rather than evenly:
+             BARN 300 to 230 still holds "Cow Barn With Feeding Robot (Lely)", and
+             REPRODUCTION 200 to 140 still holds "breeding - due 9 mo".
+             16+24=40 | 48+170=218 | 226+230=456 | 464+70=534 | 542+70=612
+             | 620+80=700 | 708+140=848 | 856+120=976 | 984+120=1104
+             | 1112+140=1252 | 1260+204=1464, and 1464 + 16 = 1480.
+             ============================================================ -->
+        <Bitmap profile="SDList" id="groupHeaderRow" position="0px -92px" size="1480px 40px"
+                visible="false">
+            <Text profile="SDHeaderLeft" position="48px 0px" size="170px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_animal"/>
+            <Text profile="SDHeaderLeft" position="226px 0px" size="230px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_barn"/>
+            <Text profile="SDHeaderRight" position="464px 0px" size="70px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_count"/>
+            <Text profile="SDHeaderRight" position="542px 0px" size="70px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_age"/>
+            <Text profile="SDHeaderRight" position="620px 0px" size="80px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_health"/>
+            <Text profile="SDHeaderLeft" position="708px 0px" size="140px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_repro"/>
+            <Text profile="SDHeaderRight" position="856px 0px" size="120px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_each"/>
+            <Text profile="SDHeaderRight" position="984px 0px" size="120px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_change"/>
+            <Text profile="SDHeaderRight" position="1112px 0px" size="140px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_total"/>
+            <Text profile="SDHeaderLeft" position="1260px 0px" size="204px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_rec"/>
+        <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <GuiElement profile="SDList" id="groupListBox" position="0px -136px" size="1480px 674px" visible="false">
+            <SmoothList profile="SDList" id="groupList" onClick="onListClick" onSelectionChanged="onListSelectionChanged" focusChangeTop="nil" focusChangeBottom="nil"
+                        position="0px 0px" size="1480px 674px">
+                <ListItem profile="SDListItemStats" name="rowTemplate" size="1480px 42px">
+                    <Bitmap name="fillIcon" position="16px 9px" size="24px 24px" visible="false"/>
+                    <Text profile="SDRowCell" position="48px 0px" size="170px 42px" textSize="12px" name="giAnimal"/>
+                    <Text profile="SDRowCell" position="226px 0px" size="230px 42px" textSize="12px" name="giBarn"/>
+                    <Text profile="SDRowCellR" position="464px 0px" size="70px 42px" textSize="12px" name="giCount"/>
+                    <Text profile="SDRowCellR" position="542px 0px" size="70px 42px" textSize="12px" name="giAge"/>
+                    <Text profile="SDRowCellR" position="620px 0px" size="80px 42px" textSize="12px" name="giHealth"/>
+                    <Text profile="SDRowCell" position="708px 0px" size="140px 42px" textSize="12px" name="giRepro"/>
+                    <Text profile="SDRowCellR" position="856px 0px" size="120px 42px" textSize="12px" name="giEach"/>
+                    <Text profile="SDRowCellR" position="984px 0px" size="120px 42px" textSize="12px" name="giChange"/>
+                    <Text profile="SDRowCellR" position="1112px 0px" size="140px 42px" textSize="12px" name="giTotal"/>
+                    <Text profile="SDRowCell" position="1260px 0px" size="204px 42px" textSize="12px" name="giRec"/>
+                </ListItem>
+                </SmoothList>
+            <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"
+                             size="12px 674px" with="anchorTopRight">
+                <Slider profile="fs25_listSlider" size="6px 666px"
+                        dataElementId="groupList" id="groupListSlider" />
+            </ThreePartBitmap>
+        </GuiElement>
+
+        <!-- ============================================================
+             VIEW 2: BARN
+             ============================================================ -->
+        <!-- COUNT and FOOD % ARE GONE FROM THIS LIST. The panel to the right of it
+             carries both for the selected barn - ANIMALS 20 / 99 and the food factor -
+             so the columns were saying twice what one screen already said once, and
+             they were the reason the name had only 170px to live in.
+             The picture is DR's own building image, resolved by DR's ordered chain
+             (5.71): a DECLARED image is not a PRESENT one, so a mod naming a file it
+             forgot to ship falls through to no icon rather than a white square.
+             THE CELL IS NAMED assetIcon DELIBERATELY - that name is already in DR's
+             LAYOUT_KEEP_ASPECT_NAMES, so the 6.15 ultrawide hook leaves its aspect
+             alone. Inventing a new name would need DR's table mutated from here
+             (18.17 says the same thing about fillIcon).
+
+             HALF WIDTH (370 -> 185, author's call). The list holds one column of one
+             short string, and at 370px it was taking a fifth of the screen to do it.
+             THE NAME WRAPS TO TWO LINES to pay for the loss: textMaxNumLines > 1 is
+             the whole mechanism - TextElement:getTextHeight calls
+             setTextWrapWidth(absSize[1]) only when more than one line is available,
+             so a long barn name now folds instead of being truncated. Wrapped text
+             centres in the row because SDRowCell is textVerticalAlignment=middle, so
+             a one-line and a two-line row still look aligned.
+             8+36=44 | 50+115=165, leaving 20px for the scrollbar that now sits at
+             the right edge of every list (20.31). It was 129 wide, ending at 179 in
+             a 185px list, which the 12px slider would have been drawn straight on
+             top of - the one column on the page with no room to spare. -->
+        <Bitmap profile="SDList" id="barnHeaderRow" position="0px -92px" size="185px 40px"
+                visible="false">
+            <Text profile="SDHeaderLeft"  position="16px 0px"  size="155px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_barn"/>
+            <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <GuiElement profile="SDList" id="barnListBox" position="0px -136px" size="185px 674px" visible="false">
+            <SmoothList profile="SDList" id="barnList" onSelectionChanged="onListSelectionChanged" focusChangeTop="nil" focusChangeBottom="nil"
+                        position="0px 0px" size="185px 674px">
+                <ListItem profile="SDListItem" name="rowTemplate" size="185px 52px">
+                    <Bitmap position="8px 11px" size="36px 30px" name="assetIcon" imageColor="1 1 1 1"/>
+                    <Text profile="SDRowCell" position="50px 0px" size="115px 52px" textSize="14px"
+                          textMaxNumLines="2" name="blName"/>
+                </ListItem>
+                </SmoothList>
+            <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"
+                             size="12px 674px" with="anchorTopRight">
+                <Slider profile="fs25_listSlider" size="6px 666px"
+                        dataElementId="barnList" id="barnListSlider" />
+            </ThreePartBitmap>
+        </GuiElement>
+        <!-- THE HUSBANDRY PANEL, COPIED VERBATIM FROM DistributionHusbandryPage.xml
+             and re-aimed at -92 / -136. Its child NAMES are the contract that
+             SmartDistribution.drawHusbandryPanel reads: one renamed child draws
+             nothing and says nothing about why. The six segment and swatch
+             colours are set in Lua so the palette lives in ONE place, validated
+             as a set against this exact track colour.
+
+             This is the SAME panel the Animal Husbandry tab shows, drawn by the
+             same function from the same API v4 provider, so the two cannot
+             drift into being two views of one set of figures. -->
+        <Bitmap profile="SDList" position="205px -92px" size="1275px 40px" id="panelHeader" name="panelHeader" visible="false">
+            <Text profile="SDHeaderLeft" position="16px 0px" size="700px 40px" textSize="11px"
+                  text="$l10n_ar_hi_panelTitle" />
+            <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
+        </Bitmap>
+
+        <GuiElement profile="SDList" position="205px -136px" size="1275px 146px" id="animalPanel" name="animalPanel" visible="false">
+
+            <!--  - block A: ANIMALS  - -->
+            <Text profile="SDBarLabel" position="16px 128px"  size="234px 14px" textSize="11px" name="apHerdLabel" />
+            <Text profile="SDBarLabel" position="16px 96px" size="118px 30px" textSize="24px" name="apCount" />
+            <!-- BESIDE THE COUNT, because that is the number it is about: whether to
+                 sell to make room for births. 11.11 measured what a full pen costs -
+                 it destroys numAnimals offspring AND the gestation that made them,
+                 permanently, every cycle - and nothing else on this strip says it.
+                 108px at 11px is about 19 characters, so it wraps to two lines; the
+                 provider writes to a 36-character budget.
+                 16+118=134 | 142+108=250, the block's own right edge. -->
+            <Text profile="SDBarLabel" position="142px 96px" size="108px 30px" textSize="11px" textMaxNumLines="2" name="apHerdAdvice" />
+            <Bitmap position="16px 84px" size="230px 8px" name="apCapBg"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.13 0.14 0.16 0.85" />
+            <Bitmap position="16px 84px" size="230px 8px" name="apCapFill"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.42 0.45 0.50 1" />
+            <Text profile="SDBarLabel" position="16px 64px" size="234px 14px" textSize="11px" name="apHealthLabel" />
+            <Bitmap position="16px 46px" size="230px 16px" name="apHealthBg"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.13 0.14 0.16 0.85" />
+            <Bitmap position="16px 46px" size="230px 16px" name="apHealthFill"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.31 0.72 0.31 1" />
+            <!-- PRODUCTIVITY, the base game's OWN headline for a husbandry
+                 (globalProductionFactor x productionFactor, exactly as
+                 getConditionInfos computes it). It is NOT the food factor: food is
+                 one input to it, so a barn can be perfectly fed and still sit at 15%
+                 for a reason nothing else on this strip would show. Same bar idiom
+                 and the same status bands as HEALTH above it. The base game HIDES
+                 it for horses and pigs, so the provider flags that and it reads
+                 "n/a" rather than a confident zero. -->
+            <Text profile="SDBarLabel" position="16px 26px" size="234px 14px" textSize="11px" name="apProdLabel" />
+            <Bitmap position="16px 8px" size="230px 16px" name="apProdBg"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.13 0.14 0.16 0.85" />
+            <Bitmap position="16px 8px" size="230px 16px" name="apProdFill"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.31 0.72 0.31 1" />
+
+            <!-- UNDER THE FEED GRAPHIC: what to put in the trough next. It reads the
+                 same groups the bar above it draws, so the sentence and the bar
+                 cannot disagree about which tier is short. 480px at 11px is about
+                 80 characters, which is why this one needs no wrapping.
+                 286+480=766, level with the feed block above it. -->
+            <Text profile="SDBarLabel" position="374px 10px" size="480px 16px" textSize="11px" name="apFeedAdvice" />
+
+            <Bitmap position="312px 8px" size="1px 134px" name="apSep1"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="1 1 1 0.16" />
+
+            <!--  - block B: FEED  - -->
+            <Text profile="SDBarLabel" position="374px 126px"  size="480px 14px" textSize="11px" name="apFeedLabel" />
+            <Text profile="SDBarLabel" position="374px 106px" size="480px 18px" textSize="13px" name="apFeedTitle" />
+            <Bitmap position="374px 80px" size="470px 22px" name="apFeedBg"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.13 0.14 0.16 0.85">
+                <Bitmap position="0px 0px" size="0px 22px" name="apSeg1" imageFilename="dataS/menu/base/graph_pixel.png" />
+                <Bitmap position="0px 0px" size="0px 22px" name="apSeg2" imageFilename="dataS/menu/base/graph_pixel.png" />
+                <Bitmap position="0px 0px" size="0px 22px" name="apSeg3" imageFilename="dataS/menu/base/graph_pixel.png" />
+                <Bitmap position="0px 0px" size="0px 22px" name="apSeg4" imageFilename="dataS/menu/base/graph_pixel.png" />
+                <Bitmap position="0px 0px" size="0px 22px" name="apSeg5" imageFilename="dataS/menu/base/graph_pixel.png" />
+                <Bitmap position="0px 0px" size="0px 22px" name="apSeg6" imageFilename="dataS/menu/base/graph_pixel.png" />
+                <Bitmap position="0px 0px" size="2px 22px" name="apTier1" imageFilename="dataS/menu/base/graph_pixel.png" imageColor="1 1 1 0.55" />
+                <Bitmap position="0px 0px" size="2px 22px" name="apTier2" imageFilename="dataS/menu/base/graph_pixel.png" imageColor="1 1 1 0.55" />
+                <Bitmap position="0px 0px" size="2px 22px" name="apTier3" imageFilename="dataS/menu/base/graph_pixel.png" imageColor="1 1 1 0.55" />
+                <Bitmap position="0px 0px" size="2px 22px" name="apTier4" imageFilename="dataS/menu/base/graph_pixel.png" imageColor="1 1 1 0.55" />
+                <Bitmap position="0px 0px" size="2px 22px" name="apTier5" imageFilename="dataS/menu/base/graph_pixel.png" imageColor="1 1 1 0.55" />
+                <Bitmap position="0px 0px" size="2px 22px" name="apTier6" imageFilename="dataS/menu/base/graph_pixel.png" imageColor="1 1 1 0.55" />
+            </Bitmap>
+
+            <Bitmap position="374px 58px" size="12px 12px" name="apLegSw1" imageFilename="dataS/menu/base/graph_pixel.png" />
+            <Text profile="SDBarLabel" position="392px 56px" size="140px 16px" textSize="11px" name="apLegTx1" />
+            <Bitmap position="534px 58px" size="12px 12px" name="apLegSw2" imageFilename="dataS/menu/base/graph_pixel.png" />
+            <Text profile="SDBarLabel" position="552px 56px" size="140px 16px" textSize="11px" name="apLegTx2" />
+            <Bitmap position="694px 58px" size="12px 12px" name="apLegSw3" imageFilename="dataS/menu/base/graph_pixel.png" />
+            <Text profile="SDBarLabel" position="712px 56px" size="140px 16px" textSize="11px" name="apLegTx3" />
+            <Bitmap position="374px 34px" size="12px 12px" name="apLegSw4" imageFilename="dataS/menu/base/graph_pixel.png" />
+            <Text profile="SDBarLabel" position="392px 32px" size="140px 16px" textSize="11px" name="apLegTx4" />
+            <Bitmap position="534px 34px" size="12px 12px" name="apLegSw5" imageFilename="dataS/menu/base/graph_pixel.png" />
+            <Text profile="SDBarLabel" position="552px 32px" size="140px 16px" textSize="11px" name="apLegTx5" />
+            <Bitmap position="694px 34px" size="12px 12px" name="apLegSw6" imageFilename="dataS/menu/base/graph_pixel.png" />
+            <Text profile="SDBarLabel" position="712px 32px" size="140px 16px" textSize="11px" name="apLegTx6" />
+
+            <Bitmap position="916px 8px" size="1px 134px" name="apSep2"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="1 1 1 0.16" />
+
+            <!--  - block C: HERD VALUE  - -->
+            <Text profile="SDBarLabel" position="978px 128px" size="280px 14px" textSize="11px" name="apValueLabel" />
+            <Text profile="SDBarLabel" position="978px 104px" size="280px 22px" textSize="16px" name="apValueMain" />
+            <Bitmap position="978px 82px" size="280px 20px" name="apValueBg"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.13 0.14 0.16 0.85" />
+            <Bitmap position="978px 82px" size="280px 20px" name="apValueFill"
+                    imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.10 0.62 0.44 1" />
+            <Text profile="SDBarLabel" position="978px 66px" size="280px 14px" textSize="11px" name="apValueOf" />
+            <Text profile="SDBarLabel" position="978px 50px" size="280px 14px" textSize="11px" name="apValueNote" />
+
+            <!--  - block D: PROFIT  -
+                 THE BREAKDOWN SITS DIRECTLY ABOVE THE HEADLINE IT EXPLAINS. It first went in the
+                 dead strip under blocks A and B, which is where the space was; on screen it read
+                 as a stray line under HEALTH with no visible connection to the figure it
+                 decomposes. Two rows of two, in the herd-value column, so the four terms and the
+                 total they make are one block.
+                 The whole of block C was re-pitched by a few px to buy the two rows; nothing in
+                 blocks A or B moved, and the strip is still 146px.
+                 794 + 140 = 934 | 934 + 140 = 1074, level with the column above. -->
+            <!-- THE HEADLINE LEADS AND THE BREAKDOWN FOLLOWS. It sat UNDER its own
+                 arithmetic for one build; a total belongs at the top of the terms
+                 that make it, the way every other figure on this strip does.
+                 The label says EST. FORECAST because that is exactly what the block
+                 is: today's rates at today's prices projected forward, not a
+                 measurement of anything that has happened. 190px at 11px is about
+                 34 characters and the longest string is 27.
+                 794 + 190 = 984 | 984 + 90 = 1074, level with the column above. -->
+            <Text profile="SDBarLabel" position="978px 32px" size="190px 16px" textSize="11px" name="apProfitLabel" />
+            <Text profile="SDBarLabel" position="1168px 32px" size="90px 16px"  textSize="13px" name="apProfitMain" />
+            <Text profile="SDBarLabel" position="978px 17px" size="140px 14px" textSize="11px" name="apProfitP1" />
+            <Text profile="SDBarLabel" position="1118px 17px" size="140px 14px" textSize="11px" name="apProfitP2" />
+            <Text profile="SDBarLabel" position="978px 2px"  size="140px 14px" textSize="11px" name="apProfitP3" />
+            <Text profile="SDBarLabel" position="1118px 2px"  size="140px 14px" textSize="11px" name="apProfitP4" />
+        </GuiElement>
+
+        <!-- upper left: the groups in this barn. 680 wide now rather than 540 -
+             seven columns in 540 was the most cramped table on the page, and the
+             185px reclaimed from the gap went mostly here.
+             16+24=40 | 48+128=176 | 184+42=226 | 234+46=280 | 288+62=350
+             | 358+118=476 | 484+76=560 | 568+96=664, +16 margin = 680 -->
+        <Bitmap profile="SDList" id="bgHeaderRow" position="205px -286px" size="680px 40px"
+                visible="false">
+            <Text profile="SDHeaderLeft" position="48px 0px" size="128px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_animal"/>
+            <Text profile="SDHeaderRight" position="184px 0px" size="42px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_count"/>
+            <Text profile="SDHeaderRight" position="234px 0px" size="46px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_age"/>
+            <Text profile="SDHeaderRight" position="288px 0px" size="62px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_health"/>
+            <Text profile="SDHeaderLeft" position="358px 0px" size="118px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_repro"/>
+            <Text profile="SDHeaderRight" position="484px 0px" size="76px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_change"/>
+            <Text profile="SDHeaderRight" position="568px 0px" size="96px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_groupValue"/>
+        <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <GuiElement profile="SDList" id="barnGroupListBox" position="205px -330px" size="680px 480px" visible="false">
+            <SmoothList profile="SDList" id="barnGroupList" focusChangeTop="nil" focusChangeBottom="nil"
+                        position="0px 0px" size="680px 480px">
+                <ListItem profile="SDListItemStats" name="rowTemplate" size="680px 42px">
+                    <Bitmap name="fillIcon" position="16px 9px" size="24px 24px" visible="false"/>
+                    <Text profile="SDRowCell" position="48px 0px" size="128px 42px" textSize="12px" name="giAnimal"/>
+                    <Text profile="SDRowCellR" position="184px 0px" size="42px 42px" textSize="12px" name="giCount"/>
+                    <Text profile="SDRowCellR" position="234px 0px" size="46px 42px" textSize="12px" name="giAge"/>
+                    <Text profile="SDRowCellR" position="288px 0px" size="62px 42px" textSize="12px" name="giHealth"/>
+                    <Text profile="SDRowCell" position="358px 0px" size="118px 42px" textSize="12px" name="giRepro"/>
+                    <Text profile="SDRowCellR" position="484px 0px" size="76px 42px" textSize="12px" name="giChange"/>
+                    <Text profile="SDRowCellR" position="568px 0px" size="96px 42px" textSize="12px" name="giTotal"/>
+                </ListItem>
+                </SmoothList>
+            <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"
+                             size="12px 480px" with="anchorTopRight">
+                <Slider profile="fs25_listSlider" size="6px 472px"
+                        dataElementId="barnGroupList" id="barnGroupListSlider" />
+            </ThreePartBitmap>
+        </GuiElement>
+
+        <!-- bottom right, upper: INPUTS, one row per PRODUCT with the food group
+             it answers to. MET is deliberately absent: it is a property of the
+             GROUP, and repeating it on every product would read as a claim about
+             the product. The barn panel carries the overall factor instead.
+
+             TWO COST COLUMNS, and the difference is the point. COST IF ALL is
+             hypothetical - what meeting this tier's whole need from this one
+             product would cost - so it compares the ways of feeding a tier.
+             COST NOW is what is actually being eaten, which is 0 for a product
+             the barn does not hold and for a whole tier a better one is covering.
+             16+24=40 | 48+120=168 | 176+96=272 | 280+70=350 | 358+58=416 | 424+70=494
+             | 502+69=571, +16 margin = 587.
+             IT TAKES THE WHOLE RIGHT COLUMN NOW. Outputs used to sit beneath it;
+             they moved left, so this runs the full height - and the spare rows are
+             deliberately HERE rather than on the other two, because a modded barn
+             can declare many food types while its groups and its outputs cannot. -->
+        <Bitmap profile="SDList" id="inputHeaderRow" position="893px -286px" size="587px 40px"
+                visible="false">
+            <Text profile="SDHeaderLeft" position="48px 0px" size="120px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_product"/>
+            <Text profile="SDHeaderLeft" position="176px 0px" size="96px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_foodGroup"/>
+            <Text profile="SDHeaderRight" position="280px 0px" size="70px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_held"/>
+            <Text profile="SDHeaderRight" position="358px 0px" size="58px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_needs"/>
+            <Text profile="SDHeaderRight" position="424px 0px" size="70px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_costPerH"/>
+            <Text profile="SDHeaderRight" position="502px 0px" size="69px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_costNow"/>
+        <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <GuiElement profile="SDList" id="inputListBox" position="893px -330px" size="587px 260px" visible="false">
+            <SmoothList profile="SDList" id="inputList" focusChangeTop="nil" focusChangeBottom="nil"
+                        position="0px 0px" size="587px 260px">
+                <ListItem profile="SDListItemStats" name="rowTemplate" size="587px 42px">
+                    <Bitmap name="fillIcon" position="16px 9px" size="24px 24px" visible="false"/>
+                    <Text profile="SDRowCell" position="48px 0px" size="120px 42px" textSize="12px" name="inProduct"/>
+                    <Text profile="SDRowCell" position="176px 0px" size="96px 42px" textSize="12px" name="inGroup"/>
+                    <Text profile="SDRowCellR" position="280px 0px" size="70px 42px" textSize="12px" name="inHeld"/>
+                    <Text profile="SDRowCellR" position="358px 0px" size="58px 42px" textSize="12px" name="inNeeds"/>
+                    <Text profile="SDRowCellR" position="424px 0px" size="70px 42px" textSize="12px" name="inCost"/>
+                    <Text profile="SDRowCellR" position="502px 0px" size="69px 42px" textSize="12px" name="inActual"/>
+                </ListItem>
+                </SmoothList>
+            <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"
+                             size="12px 260px" with="anchorTopRight">
+                <Slider profile="fs25_listSlider" size="6px 252px"
+                        dataElementId="inputList" id="inputListSlider" />
+            </ThreePartBitmap>
+        </GuiElement>
+
+        <!-- bottom right, lower: OUTPUTS. Per-animal is gone: the barn total is
+             the figure that means something, and a per-animal rate on a mixed-age
+             barn described no animal in it. The two change columns carry what a
+             static rate cannot - every output is age-curved, so the rate is not a
+             constant and a milk cliff about to land is worth seeing coming.
+             16+138=154 | 162+90=252 | 260+80=340 | 348+90=438 | 446+80=526 -->
+        <!-- PRODUCT, HELD, PROD RATE, VALUE (author's call). The two CHANGE columns
+             are gone: they carried a one-month forecast, which sat oddly beside a
+             period selector offering three of them, and HELD is the figure a reader
+             actually wants next to a rate - what is in the barn now, and how fast
+             it is filling.
+             UNDER FEED, aligned to it: same x, same width, and its bottom edge level
+             with the animals table's at -810. It reads "what goes in, then what comes
+             out", which is the pairing that column is for.
+             16+24=40 | 48+150=198 | 206+120=326 | 334+120=454 | 462+109=571,
+             +16 margin = 587 -->
+        <Bitmap profile="SDList" id="prodHeaderRow" position="893px -624px" size="587px 40px"
+                visible="false">
+            <Text profile="SDHeaderLeft" position="48px 0px" size="150px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_product"/>
+            <Text profile="SDHeaderRight" position="206px 0px" size="120px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_held"/>
+            <Text profile="SDHeaderRight" position="334px 0px" size="120px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_prodRate"/>
+            <Text profile="SDHeaderRight" position="462px 0px" size="109px 40px" textSize="11px"
+                  text="$l10n_ar_hi_col_sellValue"/>
+        <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <GuiElement profile="SDList" id="prodListBox" position="893px -666px" size="587px 144px" visible="false">
+            <SmoothList profile="SDList" id="prodList" focusChangeTop="nil" focusChangeBottom="nil"
+                        position="0px 0px" size="587px 144px">
+                <ListItem profile="SDListItemStats" name="rowTemplate" size="587px 42px">
+                    <Bitmap name="fillIcon" position="16px 9px" size="24px 24px" visible="false"/>
+                    <Text profile="SDRowCell" position="48px 0px" size="150px 42px" textSize="12px" name="pdProduct"/>
+                    <Text profile="SDRowCellR" position="206px 0px" size="120px 42px" textSize="12px" name="pdHeld"/>
+                    <Text profile="SDRowCellR" position="334px 0px" size="120px 42px" textSize="12px" name="pdRate"/>
+                    <Text profile="SDRowCellR" position="462px 0px" size="109px 42px" textSize="12px" name="pdValue"/>
+                </ListItem>
+                </SmoothList>
+            <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"
+                             size="12px 144px" with="anchorTopRight">
+                <Slider profile="fs25_listSlider" size="6px 136px"
+                        dataElementId="prodList" id="prodListSlider" />
+            </ThreePartBitmap>
+        </GuiElement>
+
+    </GuiElement>
+</GUI>

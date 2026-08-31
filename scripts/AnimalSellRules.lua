@@ -38,10 +38,36 @@ AnimalSellRules.DEFAULTS = {
     sellAtPeak      = true,    -- sell an animal that will only lose value from here
     minHealthToSell = 0.75,    -- do not realise a herd at 46% of book value
     keepBreeders    = 0,       -- never take the herd below this many breeding animals
+    headroomWorthIt = true,    -- a headroom sale must be worth more than it costs
+    sellCalves      = false,   -- run the barn as a NURSERY: sell every newborn
 }
+
+-- HEADROOM CAN NEVER TAKE MORE THAN THIS FRACTION OF A HERD.
+-- The arithmetic below already guarantees it (a breeder sold closes the gap by
+-- two, so the requirement is at most half the herd), but the failure it guards
+-- against is total -- a plan that empties a pen leaves no breeders, so the
+-- headroom it bought is never used by anything. Asserted rather than assumed.
+AnimalSellRules.HEADROOM_MAX_FRACTION = 0.5
 
 AnimalSellRules.REASON_HEADROOM = "headroom"
 AnimalSellRules.REASON_PEAK     = "peak"
+
+-- THE THIRD REASON, and it exists because a slot has a THIRD use. Births with
+-- nowhere to go are DISCARDED by the base game, so every rule here was written
+-- around a pen that can only hold producers. Sell the newborn instead and the
+-- slot becomes a NURSERY -- one sale per breeding cycle, forever, from an animal
+-- that never matures and never produces. See AnimalEconomics.slotVerdict.
+AnimalSellRules.REASON_CALF     = "calf"
+
+-- THE EARNINGS TEST REFINES RULE 2, IT DOES NOT ADD A THIRD RULE.
+-- "Past peak" alone says an animal will never be worth MORE than it is now. It
+-- does not say holding it is a loss: a Holstein past peak still milks 150 L/day
+-- for ever (14.4 -- no output curve declines) against 13.9/month of capital drift,
+-- so selling it destroys a stream to avoid a much smaller decline. AnimalEconomics
+-- answers which of the two is bigger, and a peak sale now has to clear that bar.
+-- With the module absent or unable to price the output, the pre-earnings behaviour
+-- stands unchanged -- an unpriceable animal is not an animal worth nothing.
+AnimalSellRules.REASON_EARNINGS = "earnings"
 
 -- ---------------------------------------------------------------------------
 local function subTypeOf(sti)
@@ -139,8 +165,20 @@ function AnimalSellRules.priceCurve(cl)
         end
     end
 
+    -- WHAT A DISCARDED BIRTH IS ACTUALLY WORTH. The headroom rule trades a
+    -- producing adult for a slot a newborn will fill, and until now the newborn
+    -- side of that trade had no number at all -- the rule simply asserted that a
+    -- destroyed calf outranks everything. It is the first sample: age 0 at
+    -- health 100, so it is the raw curve and the generous reading of the trade.
+    local birthPrice = nil
+    for _, sm in ipairs(samples) do
+        if sm.age == 0 then birthPrice = sm.price; break end
+    end
+    if birthPrice == nil then birthPrice = samples[1].price end
+
     local curve = { samples = samples, peakAge = peakAge, peakPrice = peakVal,
-                    declines = declines, lowestAfterPeak = worstAfter }
+                    declines = declines, lowestAfterPeak = worstAfter,
+                    birthPrice = birthPrice }
     _curveCache[sti] = curve
     return curve
 end
@@ -152,6 +190,24 @@ end
 
 -- ---------------------------------------------------------------------------
 ---Everything the rules need about one barn, read live and mutating nothing.
+---THE BREEDING GATES, in the engine's own order: age first, then health.
+--
+-- EXTRACTED so the husbandry panel's profit roll-up asks the SAME question this
+-- does. Births are the largest term in a breeding barn's monthly result, and a
+-- second copy of "is this cluster breeding" is a second answer waiting to
+-- disagree with the plan sitting on the next tab.
+---Returns willBreed, tooYoung, unwell, cycleMonths.
+function AnimalSellRules.breedingOf(st, ageMonths, healthPct)
+    local minAge = st ~= nil and st.reproductionMinAgeMonth or nil
+    local minH   = st ~= nil and st.reproductionMinHealth or nil
+    local dur    = st ~= nil and st.reproductionDurationMonth or nil
+    local age    = ageMonths or 0
+    local hp     = healthPct or 0
+    local tooYoung = (minAge ~= nil and age < minAge)
+    local unwell   = (not tooYoung) and (minH ~= nil and (hp / 100) < minH)
+    return (not tooYoung and not unwell), tooYoung, unwell, dur
+end
+
 function AnimalSellRules.assess(p)
     local out = { clusters = {}, animals = 0, capacity = 0, free = 0,
                   births = 0, breeders = 0, lost = 0, value = 0 }
@@ -178,14 +234,7 @@ function AnimalSellRules.assess(p)
         local each = priceOf(cl)
         local curve = AnimalSellRules.priceCurve(cl)
 
-        local minAge = st ~= nil and st.reproductionMinAgeMonth or nil
-        local minH   = st ~= nil and st.reproductionMinHealth or nil
-        local dur    = st ~= nil and st.reproductionDurationMonth or nil
-
-        -- the gates, in the engine's own order (age, then health)
-        local tooYoung = (minAge ~= nil and age < minAge)
-        local unwell   = (not tooYoung) and (minH ~= nil and (hp / 100) < minH)
-        local willBreed = not tooYoung and not unwell
+        local willBreed, tooYoung, unwell, dur = AnimalSellRules.breedingOf(st, age, hp)
 
         -- periods until this cluster births, on the measured counter model
         local due = nil
@@ -209,16 +258,34 @@ function AnimalSellRules.assess(p)
         end
         out.value = out.value + (each or 0) * n
 
+        -- THE EARNINGS PICTURE, per animal per month. Optional by construction:
+        -- AnimalEconomics is a separate sourceFile and could be absent, and every
+        -- consumer below treats a nil `econ` as "no information" rather than as
+        -- zero -- so the rules degrade to exactly their pre-earnings behaviour.
+        local econ = nil
+        if AnimalEconomics ~= nil and AnimalEconomics.assessCluster ~= nil then
+            local okE, e = pcall(AnimalEconomics.assessCluster, p, cl, st, curve)
+            if okE and type(e) == "table" then econ = e end
+        end
+        local immature = nil
+        if AnimalEconomics ~= nil and AnimalEconomics.monthsToMaturity ~= nil then
+            local okM, m = pcall(AnimalEconomics.monthsToMaturity, st, age)
+            if okM and type(m) == "number" then immature = m end
+        end
+
         out.clusters[#out.clusters + 1] = {
             cluster = cl, subTypeIndex = cl.subTypeIndex,
             name = (st ~= nil and tostring(st.name) or "?"),
             count = n, age = age, healthPct = hp, each = each,
             total = (each ~= nil) and each * n or nil,
             willBreed = willBreed, tooYoung = tooYoung, unwell = unwell,
+            cycleMonths = dur,        -- one birth per this many months, per breeder
             dueInMonths = due, lostIfFull = lost,
             atPeak = atPeak, pastPeak = pastPeak,
             peakAge = curve ~= nil and curve.peakAge or nil,
             declines = curve ~= nil and curve.declines or false,
+            birthValue = curve ~= nil and curve.birthPrice or nil,
+            econ = econ, monthsToMaturity = immature,
         }
     end
     return out
@@ -247,8 +314,105 @@ end
 -- WHICH ANIMALS. Headroom takes from the clusters with the LEAST future in them
 -- first -- past peak, then at peak, then oldest -- so the herd keeps the animals
 -- that are still appreciating. Never below `keepBreeders`.
-function AnimalSellRules.plan(p, cfg)
+---`priceFn(cluster, n) -> net` is OPTIONAL and is how this stays pure while still quoting money the
+-- player will actually receive. cluster:getSellPrice() is the GROSS: measured 2026-08-29, a sale of 7
+-- cows quoted 604.50 each and realised 504.50 each -- a flat 100 per animal dealer fee (CLAUDE.md 13.5).
+-- Costing a plan from the gross over-promises every figure on screen, so AnimalSellExecutor.priceFn
+-- supplies the real one. With no function passed the gross is used and the module remains testable
+-- with no controller, no world and no money in sight.
+---Is a headroom sale on this cluster worth what it costs?
+-- THE TRADE, written as the arithmetic actually is. Selling one adult for
+-- headroom yields one calf that would otherwise have been discarded, and costs
+-- that adult's saleable output for as long as the calf takes to reach its own
+-- output cliff (14.4: milk at 12 months, eggs at 6 -- a CLIFF, not a ramp).
+-- Book value cancels, because you end the horizon holding an animal either way.
+-- So the entire comparison is
+--
+--        one newborn   >   the output forgone while it grows up
+--
+-- and on a dairy herd it is not close: a calf is worth a few hundred against a
+-- year of milk. On a BEEF herd nothing is age-gated at all, `maturity` is nil,
+-- and the sale proceeds exactly as it always did -- which is the case the
+-- headroom rule was written for in the first place.
+--
+-- Until now the newborn side of this trade had NO NUMBER. The rule simply
+-- asserted that a destroyed calf outranks everything, and so recommended
+-- liquidating a herd earning 35,817/month to save calves nobody had priced.
+--
+-- CORRECTED 2026-08-30, ONE DAY AFTER IT SHIPPED, and the correction is the
+-- left-hand term. It read `birthValue > maturityCost` -- the value of the CALF
+-- against the wait. Write the bookkeeping out over the horizon and that is not
+-- the trade:
+--      KEEP : assets {adult A};        cash over `onset` = onset x adultOutput
+--      SELL : assets {adult C, grown}; cash over `onset` = the SALE PROCEEDS
+-- Both end holding exactly one adult, so the ASSETS cancel -- which means the
+-- calf's own value cancels with them, because the calf IS the replacement. What
+-- does not cancel is the money you were paid. So the comparison is the adult's
+-- net sale price against the output forgone.
+--
+-- It agrees with the old form on all three of the author's barns (a Holstein
+-- nets ~1,118 against 4,038 of milk; both say keep), so nothing that shipped was
+-- wrong on this farm -- but the old form UNDER-SELLS in general: an expensive
+-- animal with weak output (net 5,000, cost 600) reads "keep" on the calf's value
+-- and "sell" on the truth.
+--
+-- The calf's value has a home, and it is the NURSERY comparison, where the calf
+-- really is sold and really is the income.
+--
+-- Returns worth (true/false) and the data behind it -- or nil for NO VERDICT.
+-- AN UNKNOWN VERDICT NEVER SUPPRESSES (15.2): with AnimalEconomics absent, or a
+-- modded animal it cannot price, the pre-earnings behaviour has to stand, or
+-- adding a module that cannot price something would silently stop selling it.
+function AnimalSellRules.headroomVerdict(c, netEach)
+    if c == nil then return nil end
+    local m = (c.econ ~= nil) and c.econ.maturity or nil
+    if m == nil or type(m.cost) ~= "number" then return nil end   -- nothing age-gated
+    local proceeds = netEach
+    if type(proceeds) ~= "number" then proceeds = c.each end      -- gross, if no net
+    if type(proceeds) ~= "number" then return nil end             -- unpriceable
+    return proceeds > m.cost,
+           { name = c.name, proceeds = proceeds, birthValue = c.birthValue,
+             cost = m.cost, months = m.months, perMonth = m.valuePerMonth }
+end
+
+---WHICH USE EARNS MORE ACROSS THE WHOLE BARN, weighted by HEADCOUNT.
+-- Per-cluster because a barn can hold several subtypes, weighted because a
+-- 1-animal cluster and a 250-animal one are not two equal opinions (15.6).
+-- `feeEach` is subtracted from every calf's price; nil means "not known", and
+-- the answer is then the pre-fee one.
+function AnimalSellRules.slotUse(a, feeEach)
+    if a == nil or AnimalEconomics == nil or AnimalEconomics.slotVerdict == nil then return nil end
+    local adultSum, nurserySum, headcount = 0, 0, 0
+    for _, c in ipairs(a.clusters or {}) do
+        local margin = (c.econ ~= nil) and c.econ.marginPerMonth or nil
+        local v = AnimalEconomics.slotVerdict(margin,
+                      type(c.birthValue) == "number" and (c.birthValue - (feeEach or 0)) or nil,
+                      c.cycleMonths)
+        if v ~= nil and (c.count or 0) > 0 then
+            adultSum   = adultSum   + v.adult   * c.count
+            nurserySum = nurserySum + v.nursery * c.count
+            headcount  = headcount  + c.count
+        end
+    end
+    if headcount == 0 then return nil end
+    -- cycleMonths = 1 so the already-per-month nursery figure passes straight
+    -- through: ONE function decides `use`, here and per cluster alike.
+    return AnimalEconomics.slotVerdict(adultSum / headcount, nurserySum / headcount, 1)
+end
+
+function AnimalSellRules.plan(p, cfg, priceFn)
     cfg = cfg or {}
+    -- Returns the money AND whether it is REALISED -- the game's own net, via
+    -- getTargetPrice -- or the gross fallback. The caller has to know which:
+    -- refusing a sale on a negative figure is only sound where the figure is
+    -- the real one, and the gross can never be negative.
+    local function priceOfN(c, n)
+        if priceFn ~= nil then
+            local ok, v = pcall(priceFn, c.cluster, n)
+            if ok and type(v) == "number" then return v, true end
+        end
+        return (c.each or 0) * n, false
+    end
     local function opt(k)
         local v = cfg[k]
         if v == nil then return AnimalSellRules.DEFAULTS[k] end
@@ -281,51 +445,222 @@ function AnimalSellRules.plan(p, cfg)
 
     -- how many slots the barn must have free. -1 derives it from the measured
     -- 1:1 doubling: next cycle needs one slot per breeding animal.
-    local want = opt("keepFreeSlots")
-    if type(want) ~= "number" or want < 0 then want = a.births end
+    local rawWant = opt("keepFreeSlots")
+    local derived = (type(rawWant) ~= "number" or rawWant < 0)
+    local want = derived and a.births or rawWant
     local needed = math.max(0, want - a.free)
 
     -- never take the herd below the breeder floor
     local keep = opt("keepBreeders") or 0
     local breederRoom = math.max(0, a.breeders - keep)
+    -- ONE budget for the whole plan: the nursery selldown, the headroom loop and
+    -- the peak rule all draw on the same breeder floor, so it is declared here
+    -- rather than inside any one of them.
+    local budget = breederRoom
 
     -- ---- rank: least future first --------------------------------------
+    -- EARNINGS RANK ABOVE AGE AND BELOW PEAK, which is the deliberate part. Peak
+    -- state is a fact about the price curve and is certain; earnings depend on
+    -- prices and on the barn's efficiency and can be unknown, so they refine the
+    -- order within a peak state rather than overriding it. Where earnings ARE
+    -- known, the lowest monthly margin goes first -- which is a better answer than
+    -- "oldest" whenever a barn holds two clusters of the same age doing different
+    -- work, and identical to it when they do not.
+    local function margin(c)
+        return c.econ ~= nil and c.econ.marginPerMonth or nil
+    end
     local order = {}
     for _, c in ipairs(a.clusters) do order[#order + 1] = c end
     table.sort(order, function(x, y)
         if x.pastPeak ~= y.pastPeak then return x.pastPeak end       -- losing value now
         if x.atPeak ~= y.atPeak then return x.atPeak end             -- nothing left to gain
+        local mx, my = margin(x), margin(y)
+        if mx ~= nil and my ~= nil and mx ~= my then return mx < my end  -- earns least first
         if x.age ~= y.age then return x.age > y.age end              -- oldest first
         return tostring(x.name) < tostring(y.name)                   -- stable
     end)
 
+    -- A SALE THAT PAYS NOTHING IS NOT A SALE. 13.5 measured a dealer fee that is
+    -- charged PER ANIMAL; on a cheap animal it can exceed the animal's own price,
+    -- so the "revenue" goes NEGATIVE and the transaction destroys the animal and
+    -- charges you for the privilege. Whether that happens turns on a fee model
+    -- 13.5 could not resolve -- its own scaling test distinguishes per-animal
+    -- from per-transaction but NOT a flat 100 from 16.54% of gross, and at a
+    -- chicken's 25 those two differ by the SIGN of the answer.
+    --
+    -- This needs no answer to that question. It refuses only on the REALISED
+    -- figure, so under a percentage fee it can never fire, and under a flat one
+    -- it is exactly what stops a flock being sold at a loss.
+    local refused = nil
     local function take(c, n, reason)
         if n <= 0 then return 0 end
         n = math.min(n, c.count)
         if n <= 0 then return 0 end
+        local rev, realised = priceOfN(c, n)
+        if realised and rev <= 0 then
+            if refused == nil then
+                refused = { name = c.name, count = n, revenue = rev, each = c.each }
+            end
+            return 0
+        end
         plan.lines[#plan.lines + 1] = {
             cluster = c.cluster, name = c.name, count = n, reason = reason,
-            each = c.each, revenue = (c.each or 0) * n,
+            each = c.each,            -- the GROSS per animal, as the game quotes it
+            revenue = rev,            -- what the sale would actually realise
+            gross = (c.each or 0) * n,
             age = c.age, healthPct = c.healthPct,
         }
         plan.total = plan.total + n
-        plan.revenue = plan.revenue + (c.each or 0) * n
+        plan.revenue = plan.revenue + rev
         return n
     end
 
-    -- ---- 1. HEADROOM ----------------------------------------------------
-    local left = needed
-    local budget = breederRoom
-    if needed > 0 then
-        for _, c in ipairs(order) do
-            if left <= 0 then break end
-            local allowed = c.willBreed and math.min(left, budget) or left
-            local took = take(c, allowed, AnimalSellRules.REASON_HEADROOM)
-            left = left - took
-            if c.willBreed then budget = budget - took end
+    -- ---- 0. WHAT IS THIS BARN FOR? --------------------------------------
+    -- A pen slot holds a producer, or it is kept free as a NURSERY: a calf is
+    -- born into it each cycle and sold at once. Maximising over the whole pen
+    -- collapses to ONE per-slot comparison and the capacity cancels out
+    -- (AnimalEconomics.slotVerdict); the optimum is only ever FULL of adults or
+    -- EXACTLY HALF, never between.
+    --
+    -- THE FEE IS ONLY PAID FOR WHEN IT COULD CHANGE THE ANSWER. A dealer fee can
+    -- only ever REDUCE the nursery side, so a barn that says ADULT on the gross
+    -- says ADULT on the net too and needs no price lookup at all -- which is
+    -- every producing barn, and is what keeps `netPriceFn` lazy. Only a gross
+    -- NURSERY verdict is re-tested against real money.
+    local slot = AnimalSellRules.slotUse(a, nil)
+    if slot ~= nil and slot.use == "NURSERY" and priceFn ~= nil then
+        -- A newborn that does not exist cannot be quoted, so the calf is costed
+        -- with an ADULT's own fee. Under a flat per-animal fee that is exact;
+        -- under a percentage it over-charges a cheap calf and so UNDER-states
+        -- the nursery -- the conservative direction for the aggressive answer.
+        local feeEach = nil
+        for _, c in ipairs(a.clusters) do
+            if type(c.each) == "number" and c.each > 0 then
+                local net, realised = priceOfN(c, 1)
+                if realised then feeEach = math.max(0, c.each - net); break end
+            end
         end
-        if left > 0 then note("blocked", { short = left, keepBreeders = keep }) end
+        if feeEach ~= nil then slot = AnimalSellRules.slotUse(a, feeEach) end
     end
+    plan.slot = slot
+
+    local nursery = (slot ~= nil and slot.use == "NURSERY")
+    if nursery and not opt("sellCalves") then
+        -- ADVISORY UNTIL SWITCHED ON. Halving a producing herd is a large and
+        -- visible recommendation, so the model reports the finding and plans
+        -- nothing. The player opts in per barn.
+        local half = math.ceil((a.capacity or 0) / 2)
+        note("nursery", { adult = slot.adult, nursery = slot.nursery,
+                          perMonth = slot.margin * half, adults = half })
+        nursery = false
+    end
+
+    if nursery then
+        -- (a) THE HARVEST. An animal too young to breed is stock, not herd: it
+        -- occupies a slot, produces nothing sellable, and is what this barn is
+        -- being run to make.
+        for _, c in ipairs(order) do
+            if c.tooYoung then take(c, c.count, AnimalSellRules.REASON_CALF) end
+        end
+        -- (b) AND KEEP THE BREEDING HALF, so next cycle's calves have somewhere
+        -- to be born. Above half, every extra adult is a slot its own calf
+        -- cannot use.
+        local target = math.ceil((a.capacity or 0) / 2)
+        local adults = 0
+        for _, c in ipairs(a.clusters) do
+            if not c.tooYoung then adults = adults + (c.count or 0) end
+        end
+        local over = adults - target
+        for _, c in ipairs(order) do
+            if over <= 0 then break end
+            if not c.tooYoung then
+                local allowed = c.willBreed and math.min(over, budget) or over
+                local took = take(c, allowed, AnimalSellRules.REASON_HEADROOM)
+                over = over - took
+                if c.willBreed then budget = budget - took end
+            end
+        end
+    else
+
+    -- ---- 1. HEADROOM ----------------------------------------------------
+    -- THE GAP IS MEASURED IN SLOTS, AND A BREEDER CLOSES IT TWICE.
+    -- Selling any animal frees a slot; selling a BREEDER also removes the birth
+    -- it would have contributed, so it closes the gap by TWO. The old form asked
+    -- for `births` animals outright -- which counts the slots the CURRENT herd
+    -- needs while ignoring that selling shrinks the herd -- and so over-sold by
+    -- exactly 2x everywhere. At a FULL pen it resolved to selling every animal
+    -- in the barn, which is self-defeating: no breeders left means no births, so
+    -- the headroom it bought is never used by anything.
+    --
+    -- Measured on the author's own barn (96/96 Holsteins, 96 births, 0 free):
+    -- the old rule recommended 96, the corrected one 48 -- and 48 is not merely
+    -- smaller, it lands exactly on the fixed point, 48 kept / 48 slots free /
+    -- 48 calves. Same on the harness coop: 140 -> 70, again exact.
+    --
+    -- An EXPLICIT keepFreeSlots is an absolute free-slot target and is NOT tied
+    -- to the herd size, so there a sale closes the gap by one however it breeds.
+    local deficit = needed
+    local hardCap = math.floor(a.animals * AnimalSellRules.HEADROOM_MAX_FRACTION)
+    local bar = opt("headroomWorthIt")
+    local declined = nil
+    if deficit > 0 then
+        for _, c in ipairs(order) do
+            if deficit <= 0 or plan.total >= hardCap then break end
+            local worth, why = nil, nil
+            if bar then
+                -- the trade is priced on what the SALE PAYS, so quote the net
+                local netEach = priceOfN(c, 1)
+                worth, why = AnimalSellRules.headroomVerdict(c, netEach)
+            end
+            if worth == false then
+                -- The calf is worth less than the wait. Say so; sell nothing here.
+                if declined == nil then declined = why end
+            else
+                local per = (derived and c.willBreed) and 2 or 1
+                local allowed = math.ceil(deficit / per)
+                if c.willBreed then allowed = math.min(allowed, budget) end
+                allowed = math.min(allowed, hardCap - plan.total)
+                local took = take(c, allowed, AnimalSellRules.REASON_HEADROOM)
+                deficit = deficit - took * per
+                if c.willBreed then budget = budget - took end
+            end
+        end
+        -- WHY NOTHING (MORE) HAPPENED, naming the actual cause. `refused` gets no
+        -- note here: the `unsellable` one at the end of the plan explains it, and
+        -- blaming the breeder floor would name the wrong reason entirely.
+        if deficit > 0 and declined ~= nil then
+            note("breeding", declined)
+        elseif deficit > 0 and refused == nil then
+            note("blocked", { short = deficit, keepBreeders = keep })
+        end
+
+        -- THE COST OF THE SWAP, stated rather than hidden. A headroom sale trades a
+        -- PRODUCING adult for a slot that a newborn will fill -- and 14.4 measured
+        -- that saleable output is a CLIFF, so that newborn produces nothing for
+        -- 6 months (eggs) or 12 (milk). The rule does not change: a full pen
+        -- destroys whole animals and a whole gestation, which still outranks a
+        -- maturity lag. But the player is told what the trade costs instead of
+        -- being shown a sale that looks free.
+        if #plan.lines > 0 then
+            local worst, perMonth = nil, 0
+            for _, ln in ipairs(plan.lines) do
+                if ln.reason == AnimalSellRules.REASON_HEADROOM then
+                    for _, c in ipairs(a.clusters) do
+                        if c.cluster == ln.cluster and c.econ ~= nil and c.econ.maturity ~= nil then
+                            local m = c.econ.maturity
+                            if worst == nil or m.months > worst then worst = m.months end
+                            perMonth = perMonth + (m.valuePerMonth or 0) * ln.count
+                        end
+                    end
+                end
+            end
+            if worst ~= nil and worst > 0 then
+                note("maturity", { months = worst, perMonth = perMonth,
+                                   cost = perMonth * worst })
+            end
+        end
+    end
+    end     -- ...the ADULT branch of the nursery choice above
 
     -- ---- 2. PEAK --------------------------------------------------------
     if opt("sellAtPeak") then
@@ -337,20 +672,152 @@ function AnimalSellRules.plan(p, cfg)
             for _, ln in ipairs(plan.lines) do sold[ln.cluster] = (sold[ln.cluster] or 0) + ln.count end
             for _, c in ipairs(order) do
                 if c.pastPeak then
-                    local free = c.count - (sold[c.cluster] or 0)
-                    local allowed = c.willBreed and math.min(free, budget) or free
-                    local took = take(c, allowed, AnimalSellRules.REASON_PEAK)
-                    if c.willBreed then budget = budget - took end
+                    -- THE EARNINGS BAR. Past peak means it will never be worth
+                    -- more; it does NOT mean holding it loses money. Sell only
+                    -- where a month of earnings fails to cover a month of decline.
+                    -- An unknown verdict does NOT suppress: with no economics the
+                    -- old behaviour has to stand, or adding a module that cannot
+                    -- price a modded animal would silently stop selling it.
+                    local earns = (c.econ ~= nil) and c.econ.keep or nil
+                    if earns == true then
+                        note("earning", { name = c.name, count = c.count,
+                                          margin = c.econ.marginPerMonth,
+                                          earns = c.econ.earnsPerMonth,
+                                          drift = c.econ.driftPerMonth })
+                    else
+                        local free = c.count - (sold[c.cluster] or 0)
+                        local allowed = c.willBreed and math.min(free, budget) or free
+                        local took = take(c, allowed, AnimalSellRules.REASON_PEAK)
+                        if c.willBreed then budget = budget - took end
+                    end
                 end
             end
         end
     end
 
+    if refused ~= nil then note("unsellable", refused) end
     if a.lost > 0 and needed <= 0 then note("info", { lost = a.lost }) end
     return plan
 end
 
 ---One line per reason, for a UI that wants to say WHY rather than list clusters.
+-- ---------------------------------------------------------------------------
+-- THE PER-GROUP RECOMMENDATION.
+--
+-- Requested 2026-08-31: a column on the Herd Inspector's groups view saying what to
+-- do with THIS group and why -- "Sell - old and losing value", "Keep - still
+-- appreciating". The plan already decides what to SELL; this answers the other 90%
+-- of the rows, which the plan is silent about because it has nothing to do to them.
+--
+-- IT RETURNS A CODE AND DATA, NEVER A SENTENCE. Same rule the plan's own `notes`
+-- follow and for the same reason: this module is pure, has no business knowing what
+-- language the player reads, and the harness must be able to assert on figures
+-- rather than on wording. The GUI formats and localises.
+--
+-- PRECEDENCE, and every step of it is a rule that already existed somewhere:
+--   1. THE PLAN WINS. If it has a line for this cluster, that is what will actually
+--      happen, and a recommendation that disagreed with the plan on the next tab
+--      would be a second opinion (18.16's failure, one screen over).
+--   2. HEALTH BEFORE ECONOMICS. A herd below its own reproduction floor is not
+--      breeding at all, and selling at 0.40 + 0.60h of book realises a fraction of
+--      what feeding it first would (16.5). Feeding is the instruction.
+--   3. NOT PRODUCING YET beats every value argument. A calf's whole case is the
+--      cliff it has not reached (14.4), and "producing in 11 months" says more than
+--      any figure about what it is worth today.
+--   4. THEN THE CAPITAL RULE (15.1): keeping wins while a month of earnings beats a
+--      month of decline. An APPRECIATING animal has no decline to beat, so it is a
+--      keep on its own -- which is the commonest row on any farm and the one the
+--      plan says nothing about.
+--
+-- NIL IS NOT ZERO, here as everywhere: an unpriceable animal yields UNKNOWN rather
+-- than a confident verdict built on a missing term (15.6).
+AnimalSellRules.REC_SELL, AnimalSellRules.REC_KEEP = "sell", "keep"
+AnimalSellRules.REC_ACT, AnimalSellRules.REC_NONE  = "act", "none"
+
+---Returns { action, code, data } for one assess cluster row.
+--  action  sell | keep | act | none        -- what the player should DO
+--  code    the specific reason, for the GUI to look up
+--  data    the group's OWN figures, so the sentence can name them
+function AnimalSellRules.recommendation(c, plan)
+    if type(c) ~= "table" then return nil end
+    local e = c.econ
+    local n = c.count or 0
+
+    -- 1. THE PLAN WINS -----------------------------------------------------
+    for _, ln in ipairs((plan ~= nil and plan.lines) or {}) do
+        if ln.cluster == c.cluster and (ln.count or 0) > 0 then
+            local d = { count = ln.count, revenue = ln.revenue, each = ln.each }
+            if ln.reason == AnimalSellRules.REASON_CALF then
+                return { action = AnimalSellRules.REC_SELL, code = "calf", data = d }
+            elseif ln.reason == AnimalSellRules.REASON_HEADROOM then
+                d.lost = c.lostIfFull
+                return { action = AnimalSellRules.REC_SELL, code = "headroom", data = d }
+            elseif ln.reason == AnimalSellRules.REASON_PEAK then
+                d.drift = (e ~= nil and e.driftPerMonth ~= nil) and e.driftPerMonth * n or nil
+                return { action = AnimalSellRules.REC_SELL, code = "peak", data = d }
+            end
+            return { action = AnimalSellRules.REC_SELL, code = "plan", data = d }
+        end
+    end
+
+    -- 2. HEALTH BEFORE ECONOMICS -------------------------------------------
+    -- `unwell` is the engine's own reproduction gate, not a threshold invented
+    -- here: assess computes it as health < subType.reproductionMinHealth.
+    if c.unwell then
+        return { action = AnimalSellRules.REC_ACT, code = "unwell",
+                 data = { health = c.healthPct } }
+    end
+
+    -- 3. NOT PRODUCING YET --------------------------------------------------
+    local months = c.monthsToMaturity
+    if type(months) == "number" and months > 0 then
+        return { action = AnimalSellRules.REC_KEEP, code = "young",
+                 data = { months = months } }
+    end
+    -- too young to BREED is a weaker claim than too young to PRODUCE, so it only
+    -- speaks when maturity could not be resolved
+    if c.tooYoung then
+        return { action = AnimalSellRules.REC_KEEP, code = "growing", data = {} }
+    end
+
+    -- 4. THE CAPITAL RULE ---------------------------------------------------
+    if e == nil or e.driftPerMonth == nil then
+        return { action = AnimalSellRules.REC_NONE, code = "unknown", data = {} }
+    end
+    local drift = e.driftPerMonth
+    if drift < 0 then
+        -- APPRECIATING: no decline to beat, so this is a keep on its own. The
+        -- commonest row on any farm, and the one the plan is silent about.
+        return { action = AnimalSellRules.REC_KEEP, code = "appreciating",
+                 data = { gain = -drift * n } }
+    end
+
+    local earns = e.earnsPerMonth
+    if earns == nil then
+        return { action = AnimalSellRules.REC_NONE, code = "unknown", data = {} }
+    end
+    if drift > 0 then
+        -- DECLINING. 15.2: past peak means it will never be worth MORE; it does
+        -- NOT mean holding it loses money. Which is bigger decides the verdict.
+        if earns > drift then
+            return { action = AnimalSellRules.REC_KEEP, code = "outearns",
+                     data = { margin = (earns - drift) * n, drift = drift * n } }
+        end
+        return { action = AnimalSellRules.REC_SELL, code = "declining",
+                 data = { drift = drift * n, earns = earns * n } }
+    end
+
+    -- FLAT curve (chickens, pigs -- 11.3 measured that only cows decline). There is
+    -- nothing to be early or late for, so the only question is whether it earns.
+    if earns > 0 then
+        return { action = AnimalSellRules.REC_KEEP, code = "steady",
+                 data = { earns = earns * n } }
+    end
+    return { action = AnimalSellRules.REC_SELL, code = "unprofitable",
+             data = { earns = earns * n } }
+end
+
+-- ---------------------------------------------------------------------------
 function AnimalSellRules.summarise(plan)
     local by = {}
     for _, ln in ipairs(plan.lines or {}) do

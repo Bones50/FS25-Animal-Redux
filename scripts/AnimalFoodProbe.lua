@@ -768,6 +768,12 @@ function AnimalFoodProbe.register()
         "consoleCommandTradeOpen", AnimalFoodProbe)
     addConsoleCommand("arReproProbe", "Reproduction yield + the health/age price terms (clone-only)",
         "consoleCommandRepro", AnimalFoodProbe)
+    addConsoleCommand("arSellProbe", "Can a mod sell animals headlessly? (dry run; add 'go' to try one)",
+        "consoleCommandSell", AnimalFoodProbe)
+    addConsoleCommand("arSellDiff", "What does the GUI set on a sell controller that we do not?",
+        "consoleCommandSellDiff", AnimalFoodProbe)
+    addConsoleCommand("arOutputCurve", "Does output depend on animal AGE? (read only, no clones)",
+        "consoleCommandOutputCurve", AnimalFoodProbe)
     AnimalFoodProbe._registered = true
     return true
 end
@@ -1864,4 +1870,968 @@ function AnimalFoodProbe:consoleCommandRepro(fragment)
     local ok, err = pcall(AnimalFoodProbe.runReproProbe, fragment)
     if not ok then return "arReproProbe failed: " .. tostring(err) end
     return "arReproProbe done -- see log.txt"
+end
+
+-- ============================================================================
+-- arSellProbe -- CAN A MOD SELL ANIMALS WITHOUT REIMPLEMENTING THE TRANSACTION?
+--
+--   arSellProbe <barn fragment>        DRY RUN. Sells nothing. Reports the
+--                                      controller, which way it points, the
+--                                      items on each side and their prices.
+--   arSellProbe <barn fragment> go     Attempts to sell ONE animal, measuring
+--                                      money and headcount either side of it.
+--
+-- WHY THIS EXISTS. PlaceableHusbandryAnimals registers addCluster / addAnimals
+-- and NO remove or sell, the cluster-system classes are absent from the shipped
+-- SDK source entirely, and AnimalSellEvent's constructor cannot be read. So the
+-- executor has exactly two options and only one of them is safe:
+--
+--   (a) hand-roll it -- cluster:changeNumAnimals(-n) plus addMoney plus dirty
+--       flags plus MP sync. That reimplements the base game's own transaction,
+--       and every part of it that is wrong loses the player animals or money
+--       SILENTLY.
+--   (b) drive the base game's OWN controller with no GUI attached. CLAUDE.md
+--       10.6 already confirmed in game that setController(husbandry, nil, true)
+--       gives a working per-barn SELL screen, so the transaction demonstrably
+--       works; the only question is whether it can be reached headlessly.
+--
+-- This probe answers (b), and it is written to answer it WITHOUT betting the
+-- player's herd on the answer: the default run mutates nothing at all.
+--
+-- THE THING IT MUST NOT ASSUME: which side is which. "Source" and "target" are
+-- the screen's two columns, not "sell" and "buy" -- applySource may well be the
+-- BUY path. That is why every run prints getSourceName / getTargetName and the
+-- item count on each side BEFORE anything is applied.
+--
+-- Method presence is tested BY NAME through indexing, never pairs(): these
+-- classes wear a protected metatable (10.5 / DR 6.12), so an empty enumeration
+-- is not evidence of an empty object.
+--
+-- REMOVE with the other probes before release.
+-- ============================================================================
+
+local function sout(fmt, ...)
+    local ok, msg = pcall(string.format, fmt, ...)
+    print("[arSell] " .. (ok and msg or tostring(fmt)))
+end
+
+local CTRL_METHODS = {
+    "getSourceItems", "getTargetItems", "getSourcePrice", "getTargetPrice",
+    "getSourceName", "getTargetName", "getSourceActionText", "getTargetActionText",
+    "applySource", "applyTarget", "applySourceBulk", "applyTargetBulk",
+    "getMaxNumAnimals", "getSourceMaxNumAnimals", "getTargetMaxNumAnimals",
+    "onAnimalsChanged", "validateSourceItem", "canApplySource",
+    -- run 1: both item lists came back empty on a barn with 96 animals, so the list-building
+    -- methods matter as much as the apply ones
+    "initSourceItems", "initTargetItems", "initItems", "onOpen", "update", "refreshItems",
+}
+
+local ITEM_METHODS = {
+    "getNumAnimals", "getSubTypeIndex", "getPrice", "getSellPrice", "getName",
+    "getAge", "getHealth", "getCluster", "getClusterId", "getSupportsMerging",
+}
+
+---Which of `names` resolve on `o`. Indexing only -- see the protected-metatable note.
+local function resolves(o, names)
+    local yes, no = {}, {}
+    for _, n in ipairs(names) do
+        local ok, v = pcall(function() return o[n] end)
+        if ok and type(v) == "function" then yes[#yes + 1] = n else no[#no + 1] = n end
+    end
+    return yes, no
+end
+
+local function joined(t, max)
+    if #t == 0 then return "(none)" end
+    local out = {}
+    for i = 1, math.min(#t, max or 12) do out[i] = t[i] end
+    if #t > (max or 12) then out[#out + 1] = string.format("... +%d", #t - (max or 12)) end
+    return table.concat(out, ", ")
+end
+
+local function farmMoney(farmId)
+    local fm = g_farmManager
+    if fm ~= nil and fm.getFarmById ~= nil and farmId ~= nil then
+        local ok, f = pcall(fm.getFarmById, fm, farmId)
+        if ok and f ~= nil and f.money ~= nil then return f.money end
+    end
+    if g_currentMission ~= nil and g_currentMission.getMoney ~= nil then
+        local ok, m = pcall(g_currentMission.getMoney, g_currentMission)
+        if ok then return m end
+    end
+    return nil
+end
+
+---Describe one trade item without assuming anything about its shape.
+local function describeItem(it, i)
+    if type(it) ~= "table" then
+        sout("    [%d] not a table (%s)", i, type(it)); return
+    end
+    local yes = resolves(it, ITEM_METHODS)
+    local bits = {}
+    for _, n in ipairs({ "getNumAnimals", "getAge", "getHealth", "getSubTypeIndex" }) do
+        local okF, v = pcall(function() return it[n] end)
+        if okF and type(v) == "function" then
+            local ok2, r = pcall(v, it)
+            if ok2 then bits[#bits + 1] = string.format("%s=%s", n:gsub("^get", ""), tostring(r)) end
+        end
+    end
+    -- plain fields too: an item may carry data rather than accessors
+    for _, k in ipairs({ "numAnimals", "subTypeIndex", "age", "health", "price", "name" }) do
+        local okF, v = pcall(function() return it[k] end)
+        if okF and v ~= nil and type(v) ~= "function" and type(v) ~= "table" then
+            bits[#bits + 1] = string.format(".%s=%s", k, tostring(v))
+        end
+    end
+    sout("    [%d] %s", i, #bits > 0 and table.concat(bits, "  ") or "(no readable fields)")
+    sout("        resolves: %s", joined(yes, 10))
+end
+
+---Build a controller for this barn WITHOUT showing a GUI, trying each known route.
+local function buildController(husb)
+    -- route 1: the class directly. This is the one that matters -- it is what an
+    -- executor would use, with no screen involved at all.
+    if AnimalScreenDealerFarm ~= nil and AnimalScreenDealerFarm.new ~= nil then
+        local ok, c = pcall(AnimalScreenDealerFarm.new, husb, nil, true)
+        if ok and type(c) == "table" then return c, "AnimalScreenDealerFarm.new(husb, nil, true)" end
+        local ok2, c2 = pcall(AnimalScreenDealerFarm.new, husb)
+        if ok2 and type(c2) == "table" then return c2, "AnimalScreenDealerFarm.new(husb)" end
+        sout("  AnimalScreenDealerFarm.new refused: %s", tostring(c))
+    end
+    -- route 2: let the screen build it, then borrow it without calling showGui.
+    -- 10.6 confirmed setController works; this asks whether the controller alone
+    -- is usable when the GUI is never shown.
+    if g_animalScreen ~= nil and g_animalScreen.setController ~= nil then
+        local ok = pcall(g_animalScreen.setController, g_animalScreen, husb, nil, true)
+        if ok then
+            for _, k in ipairs({ "controller", "animalController", "screenController" }) do
+                local okF, v = pcall(function() return g_animalScreen[k] end)
+                if okF and type(v) == "table" then
+                    return v, "g_animalScreen:setController(...) -> ." .. k
+                end
+            end
+            sout("  setController ran but no controller field was found on g_animalScreen")
+        end
+    end
+    return nil, nil
+end
+
+function AnimalFoodProbe.runSell(fragment, mode, countArg, arg3Arg)
+    local doIt = (mode ~= nil and tostring(mode):lower() == "go")
+    -- applyTarget(item, N, X) SOLD ONE COW. Two things that run could not separate, because this
+    -- farm is farm 1 and the winning shape was {item, 1, 1}:
+    --   * is argument 2 the COUNT?   sell 2 and see whether the herd drops by 2
+    --   * is argument 3 the FARM ID? pass a farm that does not exist and see if it still sells
+    -- Both are answered by making them settable rather than by reasoning about them.
+    local sellN = tonumber(countArg) or 1
+    local arg3 = tonumber(arg3Arg)
+    sout("count=%d  arg3=%s", sellN, arg3 ~= nil and tostring(arg3) or "(sweep)")
+    sout("=== arSellProbe  (%s) ===", doIt and "LIVE -- will try to sell ONE animal"
+                                            or "dry run -- nothing will be sold")
+
+    -- 10.8: sample deliberately, and say what was sampled. Ordered by the player's
+    -- own farm and then by headcount, so an empty map-owned shed is never the case
+    -- the probe reports on.
+    local myFarm = g_currentMission ~= nil and g_currentMission:getFarmId() or nil
+    local barns = AnimalFoodProbe.findBarns(fragment)
+    local rows = {}
+    for _, b in ipairs(barns) do
+        local p = b.placeable
+        if p.getNumOfAnimals ~= nil then
+            local okO, of = pcall(function() return p:getOwnerFarmId() end)
+            local okN, n = pcall(p.getNumOfAnimals, p)
+            rows[#rows + 1] = { p = p, name = b.name, n = (okN and n) or 0,
+                                farm = okO and of or nil }
+        end
+    end
+    table.sort(rows, function(a, b)
+        local am = (a.farm == myFarm) and 1 or 0
+        local bm = (b.farm == myFarm) and 1 or 0
+        if am ~= bm then return am > bm end
+        return a.n > b.n
+    end)
+    sout("barns found: %d   (player farm = %s)", #rows, tostring(myFarm))
+    for i, r in ipairs(rows) do
+        sout("  %d. %-38s farm=%-4s animals=%d", i, r.name, tostring(r.farm), r.n)
+    end
+    local pick = rows[1]
+    if pick == nil or pick.n <= 0 then
+        sout("no barn with animals matched '%s' -- nothing to probe", tostring(fragment))
+        return
+    end
+    sout("probing: %s (%d animals, farm %s)", pick.name, pick.n, tostring(pick.farm))
+
+    local husb = pick.p
+    local ctrl, how = buildController(husb)
+    if ctrl == nil then
+        sout("NO CONTROLLER COULD BE BUILT. The headless route is not available and the")
+        sout("executor would have to hand-roll the transaction -- report this line.")
+        return
+    end
+    sout("controller built via %s", how)
+
+    -- RUN 1 RETURNED "SOURCE items: 0 / TARGET items: 0" ON A BARN HOLDING 96 COWS. The controller
+    -- constructs, but constructing is not opening: the GUI's own open path populates the two
+    -- columns, and nothing had. The method names were already in front of us -- this file's own
+    -- notes record RL overwriting AnimalScreenDealerFarm.initTargetItems -- so the lists are built
+    -- by init*Items and a headless caller has to invoke them itself.
+    local inited = {}
+    for _, n in ipairs({ "initSourceItems", "initTargetItems", "initItems", "onOpen", "update" }) do
+        local okF, f = pcall(function() return ctrl[n] end)
+        if okF and type(f) == "function" then
+            local ok, err = pcall(f, ctrl)
+            inited[#inited + 1] = string.format("%s%s", n, ok and "" or "(threw: " .. tostring(err) .. ")")
+        end
+    end
+    sout("  init calls: %s", #inited > 0 and table.concat(inited, ", ") or "(none resolved)")
+
+    local yes, no = resolves(ctrl, CTRL_METHODS)
+    sout("  resolves: %s", joined(yes, 18))
+    sout("  lacks   : %s", joined(no, 18))
+
+    -- WHICH WAY IS IT POINTING? source/target are the screen's two columns, and
+    -- assuming source == sell is exactly the mistake this line exists to prevent.
+    for _, pair in ipairs({ { "getSourceName", "source" }, { "getTargetName", "target" },
+                            { "getSourceActionText", "source action" },
+                            { "getTargetActionText", "target action" } }) do
+        local okF, f = pcall(function() return ctrl[pair[1]] end)
+        if okF and type(f) == "function" then
+            local ok2, v = pcall(f, ctrl)
+            sout("  %-14s = %s", pair[2], ok2 and tostring(v) or "?")
+        end
+    end
+
+    local function dumpSide(getter, label)
+        local okF, f = pcall(function() return ctrl[getter] end)
+        if not okF or type(f) ~= "function" then sout("  %s: no %s", label, getter); return nil end
+        local ok, items = pcall(f, ctrl)
+        if not ok or type(items) ~= "table" then
+            sout("  %s: %s returned %s", label, getter, ok and type(items) or "an error")
+            return nil
+        end
+        sout("  %s items: %d", label, #items)
+        for i = 1, math.min(#items, 4) do describeItem(items[i], i) end
+        return items
+    end
+    local srcItems = dumpSide("getSourceItems", "SOURCE")
+    local tgtItems = dumpSide("getTargetItems", "TARGET")
+
+    -- price, asked both ways round for the first item we have
+    for _, pair in ipairs({ { "getSourcePrice", srcItems }, { "getTargetPrice", tgtItems } }) do
+        local getter, items = pair[1], pair[2]
+        if items ~= nil and items[1] ~= nil then
+            local okF, f = pcall(function() return ctrl[getter] end)
+            if okF and type(f) == "function" then
+                for _, args in ipairs({ { items[1], 1 }, { items[1] }, { 1, 1 } }) do
+                    local ok, v = pcall(f, ctrl, unpack(args))
+                    if ok then
+                        sout("  %s(%d args) = %s", getter, #args, tostring(v))
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    if not doIt then
+        local items = tgtItems
+        if items ~= nil and items[1] ~= nil then
+            local okF, f = pcall(function() return ctrl.getTargetPrice end)
+            if okF and type(f) == "function" then
+                for _, n in ipairs({ 1, 2, 7 }) do
+                    local packed = { pcall(f, ctrl, items[1], 1, n) }
+                    local bits = {}
+                    for i = 2, #packed do bits[#bits + 1] = tostring(packed[i]) end
+                    sout("  getTargetPrice(item, 1, %d) -> %s%s", n,
+                         packed[1] and "" or "ERROR ",
+                         #bits > 0 and table.concat(bits, ", ") or "(nothing)")
+                end
+            end
+            local okP, q = pcall(function() return items[1]:getPrice() end)
+            sout("  item:getPrice() = %s   (the QUOTED figure; the realised one was 100 less each)",
+                 okP and tostring(q) or "?")
+        end
+        sout("dry run complete. Re-run with 'go' to attempt ONE sale:  arSellProbe %s go",
+             tostring(fragment or ""))
+        return
+    end
+
+    -- ---- the live attempt ----------------------------------------------------
+    -- ONE animal, and only from a barn that will still have animals afterwards.
+    if pick.n <= sellN then
+        sout("REFUSING to sell %d: the barn holds %d and the probe will not empty a pen", sellN, pick.n)
+        return
+    end
+    -- MEASURED IN RUN 1, and it is the opposite of the natural reading:
+    --     source = "Animal Dealer"  action "Buy"
+    --     target = "Farm (96 / 96)" action "Sell"
+    -- So applyTARGET is the sell path and applySource would BUY. This is exactly why the first
+    -- run printed both names before touching anything -- an executor built on the assumption that
+    -- "source" means "the animals I am selling" would have spent money instead of earning it.
+    local items = tgtItems
+    local side = "Target"
+    if items == nil or #items == 0 then
+        sout("  target side is empty; falling back to source (this would BUY -- refusing)")
+        sout("  NOTHING APPLIED. Fix the init step first.")
+        return
+    end
+    if items == nil or #items == 0 then
+        sout("no items on either side -- nothing to apply")
+        return
+    end
+
+    local moneyBefore = farmMoney(pick.farm)
+    local countBefore = pick.n
+    sout("BEFORE: animals=%d  money=%s  (applying to the %s side)",
+         countBefore, tostring(moneyBefore), side)
+
+    -- ---- WIRE THE FIVE CALLBACKS THE GUI SUPPLIES -------------------------------------------
+    -- arSellDiff measured the difference between a headless controller and the one the game builds
+    -- through setController: A had 7 own fields, B had 12, and the five extra are all functions.
+    -- They are exactly what DealerFarm:131/136 was trying to call.
+    --
+    -- Supplied here as RECORDERS rather than no-ops: what the controller passes back is the only
+    -- report we get on whether the sale actually completed, and errorCallback in particular is how
+    -- the game says no. A silent success and a silent refusal look identical without them.
+
+    local fired = {}
+    local function recorder(name)
+        return function(...)
+            local n = select("#", ...)
+            local bits = {}
+            for i = 1, math.min(n, 4) do
+                local v = select(i, ...)
+                bits[#bits + 1] = type(v) == "table" and "table" or tostring(v)
+            end
+            fired[#fired + 1] = string.format("%s(%s)", name, table.concat(bits, ","))
+            sout("  >> %s(%s)", name, table.concat(bits, ","))
+        end
+    end
+    for _, cbName in ipairs({ "actionTypeCallback", "animalsChangedCallback", "errorCallback",
+                             "sourceActionFinished", "targetActionFinished" }) do
+        ctrl[cbName] = recorder(cbName)
+    end
+    sout("  wired 5 callbacks the GUI supplies (measured by arSellDiff)")
+
+    -- WHAT RUN 2's ERRORS NARROWED IT TO, before guessing any further shapes:
+    --   applyTarget(item)          -> DealerFarm:123 indexes NIL with 'getPrice'
+    --   applyTarget(item, 1)       -> gets PAST that, into AnimalCluster:278, "mul on number and nil"
+    --   applyTarget(item, 1, true) -> same line, "mul on number and boolean"
+    -- So argument 3 is a NUMBER that is multiplied, and some price is nil. Both files are absent
+    -- from the SDK source (10.1), so the remaining unknown is measured, not read: ask the item and
+    -- the controller for the price directly and then feed it back in.
+    local price, numAnimals = nil, nil
+    for _, n in ipairs({ "getPrice", "getNumAnimals", "getClusterId", "getSubTypeIndex" }) do
+        local okF, f = pcall(function() return items[1][n] end)
+        if okF and type(f) == "function" then
+            local ok, v = pcall(f, items[1])
+            sout("  item:%s() = %s%s", n, tostring(v), ok and "" or "  (threw)")
+            if n == "getPrice" and ok and type(v) == "number" then price = v end
+            if n == "getNumAnimals" and ok and type(v) == "number" then numAnimals = v end
+        end
+    end
+    do  -- does the item still carry its cluster? line 278 lives in AnimalCluster
+        local okF, f = pcall(function() return items[1].getCluster end)
+        if okF and type(f) == "function" then
+            local ok, cl = pcall(f, items[1])
+            sout("  item:getCluster() = %s", ok and type(cl) or "threw")
+            if ok and type(cl) == "table" then
+                for _, n in ipairs({ "getSellPrice", "getNumAnimals", "getAge" }) do
+                    local ok2, g = pcall(function() return cl[n] end)
+                    if ok2 and type(g) == "function" then
+                        local ok3, v = pcall(g, cl)
+                        sout("    cluster:%s() = %s", n, ok3 and tostring(v) or "threw")
+                    end
+                end
+            end
+        end
+    end
+    -- THE SIGNATURE IS applyTarget(item, itemIndex, numAnimals) -- measured, and the opposite of
+    -- what the positions suggest: arg2 = 2 failed on a one-item list, while arg3 = 7 sold SEVEN.
+    -- getTargetPrice takes the same shape, and it returned a bare `true` earlier because only the
+    -- FIRST return value was captured. A price function that answers true is answering a different
+    -- question, so take the whole tuple.
+    --
+    -- THIS IS READ-ONLY, so it runs in the DRY RUN as well: the realised price can be measured
+    -- without selling anything, which is what the plan's revenue estimate needs. The item quotes
+    -- 604.50 and the sale realised 504.50 EACH (confirmed by scaling 1 -> 7), so costing a plan
+    -- from getSellPrice over-promises by 100 an animal.
+    local pf = nil
+    do
+        local okF, f = pcall(function() return ctrl.getTargetPrice end)
+        if okF and type(f) == "function" then pf = f end
+    end
+    if pf ~= nil and items ~= nil and items[1] ~= nil then
+        for _, n in ipairs({ 1, 2, 7 }) do
+            local packed = { pcall(pf, ctrl, items[1], 1, n) }
+            if packed[1] then
+                local bits = {}
+                for i = 2, #packed do bits[#bits + 1] = tostring(packed[i]) end
+                sout("  getTargetPrice(item, 1, %d) -> %s", n,
+                     #bits > 0 and table.concat(bits, ", ") or "(no return values)")
+            else
+                sout("  getTargetPrice(item, 1, %d) -> %s", n, tostring(packed[2]))
+            end
+        end
+    end
+
+    local applied, via = false, nil
+    -- run 1: applySourceBulk / applyTargetBulk do NOT exist on this controller. Only the singular
+    -- forms resolve, so a multi-line plan is applied one call at a time.
+    for _, name in ipairs({ "apply" .. side }) do
+        local okF, f = pcall(function() return ctrl[name] end)
+        if okF and type(f) == "function" then
+            -- the signature cannot be read, so try the plausible shapes and let the
+            -- ERROR TEXT name the expected arguments when they are wrong
+            local shapes
+            if arg3 ~= nil then
+                shapes = { { items[1], sellN, arg3 } }
+            else
+            shapes = {
+                { items[1], 1, 1 },                 -- arg3 as a plain number: the shape the errors point at
+                { items[1], 1, price },             -- ...or the price the item just reported
+                { items[1], price, 1 },
+                { items[1], 1, pick.farm },         -- ...or a farmId
+                { items[1], 1, 1, pick.farm },
+                { items[1], numAnimals, 1 },
+                { 1, items[1] },                    -- reversed, in case count comes first
+                { items[1], 1 },                    -- the run-2 shape, kept so the log stays comparable
+            }
+            end
+            for _, args in ipairs(shapes) do
+                local holed = false
+                for i = 1, #args do if args[i] == nil then holed = true end end
+                if holed then
+                    sout("  %s: skipping a shape with a nil in it (unpack would truncate the call)", name)
+                else
+                    local ok, err = pcall(f, ctrl, unpack(args))
+                    if ok then
+                        applied, via = true, string.format("%s(%d args)", name, #args)
+                        break
+                    end
+                    local desc = {}
+                    for i = 1, #args do desc[i] = type(args[i]) end
+                    sout("  %s(%s) -> %s", name, table.concat(desc, ","), tostring(err))
+                end
+            end
+        end
+        if applied then break end
+    end
+
+    if #fired > 0 then
+        sout("callbacks fired: %s", table.concat(fired, "  "))
+    else
+        sout("callbacks fired: (none) -- the controller never reported back")
+    end
+    if not applied then
+        sout("NO APPLY CALL SUCCEEDED -- see the errors above; they usually name the arguments")
+        return
+    end
+    sout("applied via %s", via)
+
+    local okN, countAfter = pcall(husb.getNumOfAnimals, husb)
+    local moneyAfter = farmMoney(pick.farm)
+    sout("AFTER : animals=%s  money=%s", okN and tostring(countAfter) or "?", tostring(moneyAfter))
+    if okN and type(countAfter) == "number" then
+        local dN = countBefore - countAfter
+        if dN > 0 and moneyBefore ~= nil and moneyAfter ~= nil then
+            local got = moneyAfter - moneyBefore
+            sout("ECONOMICS: sold %d for %.2f = %.2f each; the item quoted %.2f each (delta %.2f each, %.2f total)",
+                 dN, got, got / dN, price or -1, (price or 0) - got / dN, (price or 0) * dN - got)
+        end
+        sout("VERDICT: headcount %+d, money %s",
+             countAfter - countBefore,
+             (moneyBefore ~= nil and moneyAfter ~= nil)
+                 and string.format("%+.2f", moneyAfter - moneyBefore) or "?")
+        if countAfter < countBefore and moneyAfter ~= nil and moneyBefore ~= nil
+           and moneyAfter > moneyBefore then
+            sout("=> HEADLESS SELL WORKS. The executor can drive this controller directly.")
+        elseif countAfter < countBefore then
+            sout("=> animals left but the money did not move: this call is a MOVE/REMOVE, not a sale.")
+        else
+            sout("=> the call returned cleanly and changed nothing. Wrong side, or it needs the GUI.")
+        end
+    end
+end
+
+function AnimalFoodProbe:consoleCommandSell(fragment, mode, countArg, arg3Arg)
+    local ok, err = pcall(AnimalFoodProbe.runSell, fragment, mode, countArg, arg3Arg)
+    if not ok then return "arSellProbe failed: " .. tostring(err) end
+    return "arSellProbe done -- see log.txt"
+end
+
+-- ============================================================================
+-- arSellDiff -- WHAT DOES THE GUI SET THAT A HEADLESS CONTROLLER LACKS?
+--
+--   arSellDiff <barn fragment>
+--
+-- Run 3 established that the argument list is no longer the problem. With a
+-- plausible count, applyTarget reaches AnimalScreenDealerFarm lines 131 / 136 and
+-- then "attempts to call a nil value" -- it is reaching for state that a
+-- constructed-but-never-opened controller does not have. getTargetPrice fails the
+-- same way at :165.
+--
+-- So this stops permuting arguments and asks the only question left: build a
+-- controller the way the WORKING path does (g_animalScreen:setController, which
+-- 10.6 confirmed in game) and compare it, field by field, against one built
+-- directly. Whatever is a FUNCTION on the working one and nil on ours is what
+-- those lines are calling.
+--
+-- Neither controller is applied to anything. This probe sells nothing and mutates
+-- nothing; it does not even show a GUI.
+--
+-- METHOD NOTE: these classes wear a protected metatable (10.5), so pairs() may
+-- report nothing at all. Enumeration is attempted AND a candidate name list is
+-- probed by INDEXING, because indexing is the access that works. A name missing
+-- from the enumeration is not evidence of a missing field.
+-- ============================================================================
+
+local function dout(fmt, ...)
+    local ok, msg = pcall(string.format, fmt, ...)
+    print("[arSellDiff] " .. (ok and msg or tostring(fmt)))
+end
+
+-- Everything the GUI plausibly hands a controller. Probed by name, not guessed at
+-- from an enumeration that a protected metatable would leave empty.
+local FIELD_CANDIDATES = {
+    "screen", "gui", "owner", "delegate", "target", "source", "dealer",
+    "farm", "farmId", "husbandry", "trailer", "animalScreen", "list",
+    "sourceItems", "targetItems", "items", "isDealer", "mode", "direction",
+    "onAnimalsChangedCallback", "callback", "updateCallback", "onApply",
+    "onBuy", "onSell", "onApplyCallback", "errorCallback", "confirmCallback",
+    "numAnimals", "selectedItem", "selectedIndex", "maxNumAnimals",
+}
+
+local function ownFields(o)
+    local names, n = {}, 0
+    pcall(function()
+        for k, v in pairs(o) do
+            n = n + 1
+            if type(k) == "string" then names[k] = type(v) end
+        end
+    end)
+    return names, n
+end
+
+---type of o[name], by indexing -- the access that survives a protected metatable
+local function slot(o, name)
+    local ok, v = pcall(function() return o[name] end)
+    if not ok then return "?" end
+    if v == nil then return nil end
+    return type(v)
+end
+
+function AnimalFoodProbe.runSellDiff(fragment)
+    dout("=== arSellDiff -- nothing is sold, nothing is shown ===")
+
+    local myFarm = g_currentMission ~= nil and g_currentMission:getFarmId() or nil
+    local best, bestN = nil, -1
+    for _, b in ipairs(AnimalFoodProbe.findBarns(fragment)) do
+        local p = b.placeable
+        if p.getNumOfAnimals ~= nil then
+            local okO, of = pcall(function() return p:getOwnerFarmId() end)
+            local okN, n = pcall(p.getNumOfAnimals, p)
+            n = (okN and n) or 0
+            if (not okO or of == myFarm) and n > bestN then best, bestN = p, n end
+        end
+    end
+    if best == nil then dout("no barn matched '%s'", tostring(fragment)); return end
+    local nm = select(2, pcall(function() return best:getName() end))
+    dout("barn: %s (%d animals)", tostring(nm), bestN)
+
+    -- ---- A: the headless route we have been using --------------------------
+    local A = nil
+    if AnimalScreenDealerFarm ~= nil and AnimalScreenDealerFarm.new ~= nil then
+        local ok, c = pcall(AnimalScreenDealerFarm.new, best, nil, true)
+        if ok and type(c) == "table" then A = c end
+    end
+    if A == nil then dout("could not construct a headless controller at all"); return end
+    for _, n in ipairs({ "initSourceItems", "initTargetItems", "initItems" }) do
+        local okF, f = pcall(function() return A[n] end)
+        if okF and type(f) == "function" then pcall(f, A) end
+    end
+    dout("A = AnimalScreenDealerFarm.new(husb, nil, true) + init*  -- built")
+
+    -- ---- B: the route the game itself uses ---------------------------------
+    -- 10.6 confirmed setController + showGui gives a WORKING sell screen. showGui
+    -- is deliberately NOT called; if the difference turns out to be something only
+    -- showGui sets, that is itself the answer.
+    local B, whereB = nil, nil
+    if g_animalScreen ~= nil and g_animalScreen.setController ~= nil then
+        local ok, err = pcall(g_animalScreen.setController, g_animalScreen, best, nil, true)
+        dout("B: setController -> %s", ok and "ok" or tostring(err))
+        if ok then
+            -- named guesses first, then a sweep of g_animalScreen for anything
+            -- carrying applyTarget -- the controller identifies itself by what it can do
+            for _, k in ipairs({ "controller", "animalController", "screenController", "ctrl" }) do
+                if slot(g_animalScreen, k) == "table" then B, whereB = g_animalScreen[k], k; break end
+            end
+            if B == nil then
+                local names = ownFields(g_animalScreen)
+                for k, t in pairs(names) do
+                    if t == "table" then
+                        local cand = g_animalScreen[k]
+                        if slot(cand, "applyTarget") == "function" then B, whereB = cand, k; break end
+                    end
+                end
+            end
+        end
+    end
+    if B == nil then
+        dout("NO controller could be found on g_animalScreen after setController.")
+        dout("=> the GUI keeps it somewhere this probe cannot see, OR only showGui builds it.")
+        dout("   Dumping g_animalScreen's own fields so the next run knows where to look:")
+        local names, n = ownFields(g_animalScreen or {})
+        dout("   enumerated %d field(s)", n)
+        for k, t in pairs(names) do dout("     .%s : %s", k, t) end
+        return
+    end
+    dout("B found at g_animalScreen.%s", whereB)
+    dout("A == B ? %s", tostring(A == B))
+
+    -- ---- the diff ----------------------------------------------------------
+    local aNames, aN = ownFields(A)
+    local bNames, bN = ownFields(B)
+    dout("enumerated own fields: A=%d  B=%d  (0 means a protected metatable, not an empty object)", aN, bN)
+
+    local seen = {}
+    for k in pairs(aNames) do seen[k] = true end
+    for k in pairs(bNames) do seen[k] = true end
+    for _, k in ipairs(FIELD_CANDIDATES) do seen[k] = true end
+
+    local sorted = {}
+    for k in pairs(seen) do sorted[#sorted + 1] = k end
+    table.sort(sorted)
+
+    local missing, differ = {}, {}
+    for _, k in ipairs(sorted) do
+        local ta, tb = slot(A, k), slot(B, k)
+        if ta ~= tb then
+            local line = string.format("%s: A=%s  B=%s", k, tostring(ta), tostring(tb))
+            if ta == nil and tb ~= nil then missing[#missing + 1] = line
+            else differ[#differ + 1] = line end
+        end
+    end
+
+    dout("--- PRESENT ON B, ABSENT ON A  (this is the answer if anything is here) ---")
+    if #missing == 0 then dout("   (nothing)") end
+    for _, l in ipairs(missing) do dout("   %s", l) end
+    dout("--- present on both but a different type ---")
+    if #differ == 0 then dout("   (nothing)") end
+    for _, l in ipairs(differ) do dout("   %s", l) end
+
+    -- Does B actually work where A did not? The decisive check, and still read-only:
+    -- getTargetPrice fails on A at :165 in exactly the way applyTarget fails at 131/136.
+    for _, pair in ipairs({ { "A", A }, { "B", B } }) do
+        local label, c = pair[1], pair[2]
+        local okF, f = pcall(function() return c.getTargetItems end)
+        local cnt = "?"
+        if okF and type(f) == "function" then
+            local ok, items = pcall(f, c)
+            cnt = (ok and type(items) == "table") and tostring(#items) or "err"
+            if ok and type(items) == "table" and items[1] ~= nil then
+                local okP, pf = pcall(function() return c.getTargetPrice end)
+                if okP and type(pf) == "function" then
+                    local ok2, v = pcall(pf, c, items[1], 1)
+                    dout("%s: getTargetPrice(item,1) -> %s", label, tostring(v))
+                end
+            end
+        end
+        dout("%s: getTargetItems -> %s item(s)", label, cnt)
+    end
+end
+
+function AnimalFoodProbe:consoleCommandSellDiff(fragment)
+    local ok, err = pcall(AnimalFoodProbe.runSellDiff, fragment)
+    if not ok then return "arSellDiff failed: " .. tostring(err) end
+    return "arSellDiff done -- see log.txt"
+end
+
+-- ============================================================================
+-- arOutputCurve   -- TEMPORARY DEV PROBE
+--
+-- WHAT IT ANSWERS. CLAUDE.md 14.4 asked whether base FS25 gates animal output by
+-- AGE, and predicted it does not. THE SOURCE SAYS IT DOES, and the prediction was
+-- wrong. Every output spec computes its rate the same way, and all four files
+-- measure COMPLETE (19-24% blank), so this is read, not inferred:
+--
+--     local age             = cluster:getAge()
+--     local litersPerAnimal = <curve>:get(age)
+--     local litersPerDay    = litersPerAnimal * cluster:getNumAnimals()
+--     spec.litersPerHour    = spec.litersPerHour + (litersPerDay / 24)
+--
+--   PlaceableHusbandryMilk:onHusbandryAnimalsUpdate          subType.output.milk.curve
+--   PlaceableHusbandryPallets:onHusbandryAnimalsUpdate       subType.output.pallets.curve
+--   PlaceableHusbandryLiquidManure:onHusbandryAnimalsUpdate  subType.output.liquidManure
+--   PlaceableHusbandryStraw:onHusbandryAnimalsUpdate         subType.output.manure
+--                                                     AND    subType.input.straw
+--
+-- So output is not a maturity THRESHOLD, it is a curve -- the same shape as the
+-- price curve -- and STRAW INTAKE is age-curved too, so a young animal is cheaper
+-- to bed as well as less productive.
+--
+-- SO WHY PROBE AT ALL. Three things reading cannot settle:
+--
+--   1. THE CURVE SHAPES IN *THIS* INSTALL. A map or a mod may replace the subtype
+--      definitions, so a dev-time read of animals.xml is not knowledge of what is
+--      running -- the same argument AnimalSellRules.priceCurve makes for sampling
+--      the price curve live rather than tabulating it.
+--   2. THE INTERFACE. AnimCurve.lua is 93% BLANK (1 surviving function) in the
+--      shipped SDK source, so curve:get(age) cannot be read and its behaviour off
+--      the end of the defined range is unknown. CLAUDE.md 8.1: an absence there
+--      proves nothing, so fall back to a probe.
+--   3. THE TWO SHAPES OF subType.output. milk and pallets are TABLES carrying a
+--      .curve and a .fillType; liquidManure, manure and straw ARE the curve.
+--      Assuming one shape yields nil on the other SILENTLY -- so this walks the
+--      tables and asks each value what it is rather than hardcoding either.
+--
+-- IT REPRODUCES THE ENGINE'S OWN ARITHMETIC AND COMPARES (DR 5.54c). Predicting
+-- spec.litersPerHour from the curves and checking it against the live field is
+-- what turns "I read the source and think this is the mechanism" into a
+-- confirmation. A probe that does not compute what the code computes can
+-- eliminate hypotheses without ever confirming one.
+--
+-- READ ONLY, AND NO CLONES. The curve hangs off the SUBTYPE, not the cluster, and
+-- get() is a lookup the base game already performs every hour -- so unlike the
+-- price sweep this needs no clone gate and touches no cluster. Nothing here can
+-- age, re-price or re-count a single animal.
+--
+-- Usage (needs game.xml development controls true):
+--     arOutputCurve                  -- every husbandry holding animals
+--     arOutputCurve <name fragment>  -- barns whose name contains this
+--
+-- REMOVE once the earnings model is settled.
+-- ============================================================================
+
+local function oc(fmt, ...)
+    local ok, msg = pcall(string.format, fmt, ...)
+    print("[arOutputCurve] " .. (ok and msg or tostring(fmt)))
+end
+
+---A curve, whatever shape it was declared in. Returns curve, fillType, shape.
+-- The shape is REPORTED so a modded subtype declaring a third form names itself
+-- instead of being silently skipped.
+function AnimalFoodProbe.asCurve(v)
+    if type(v) ~= "table" then return nil, nil, "not a table" end
+    if type(v.get) == "function" then return v, nil, "bare curve" end
+    if type(v.curve) == "table" and type(v.curve.get) == "function" then
+        return v.curve, v.fillType, "wrapper (.curve/.fillType)"
+    end
+    return nil, nil, "table with no get() and no .curve"
+end
+
+---Sample one curve across age. Fine at the young end, because WHERE OUTPUT
+-- STARTS is the whole maturity question; coarse after, where it only plateaus.
+function AnimalFoodProbe.sampleCurve(curve)
+    local ages = {}
+    for a = 0, 24 do ages[#ages + 1] = a end
+    for a = 27, 72, 3 do ages[#ages + 1] = a end
+
+    local s, peakAge, peakVal, onset = {}, nil, nil, nil
+    for _, a in ipairs(ages) do
+        local ok, v = pcall(curve.get, curve, a)
+        if ok and type(v) == "number" then
+            s[#s + 1] = { age = a, v = v }
+            if v > 0 and onset == nil then onset = a end
+            if peakVal == nil or v > peakVal then peakAge, peakVal = a, v end
+        end
+    end
+    if #s < 2 then return nil end
+
+    local declines, lowAfter = false, peakVal
+    for _, e in ipairs(s) do
+        if e.age > peakAge and e.v < lowAfter then lowAfter, declines = e.v, true end
+    end
+    local flat = true
+    for _, e in ipairs(s) do
+        if math.abs(e.v - s[1].v) > 1e-6 then flat = false; break end
+    end
+
+    return { samples = s, onsetAge = onset, peakAge = peakAge, peakVal = peakVal,
+             declines = declines, lowestAfterPeak = lowAfter, flat = flat }
+end
+
+function AnimalFoodProbe.printCurve(c, ftName)
+    if c == nil then oc("    (could not sample)"); return end
+    if ftName ~= nil then oc("    fill type: %s", tostring(ftName)) end
+
+    if c.flat then
+        oc("    FLAT at %.4f per animal per day -- age does not affect this output",
+            c.samples[1].v)
+    else
+        oc("    onset age %s   peak %.4f at age %d   %s",
+            c.onsetAge ~= nil and tostring(c.onsetAge) or "NEVER (zero at every sampled age)",
+            c.peakVal, c.peakAge,
+            c.declines and string.format("DECLINES to %.4f", c.lowestAfterPeak)
+                        or "no decline after peak")
+    end
+
+    -- The young end in full: this is the maturity lag, if there is one.
+    local line = "    by age: "
+    for _, e in ipairs(c.samples) do
+        if e.age <= 24 then line = line .. string.format("%d=%.3f ", e.age, e.v) end
+    end
+    oc("%s", line)
+end
+
+function AnimalFoodProbe.runOutputCurve(fragment)
+    oc("=== output vs age, read only ===")
+    local ps = g_currentMission ~= nil and g_currentMission.placeableSystem or nil
+    local asys = g_currentMission ~= nil and g_currentMission.animalSystem or nil
+    if ps == nil or asys == nil then oc("no mission yet"); return end
+
+    local seenSubType = {}
+    local barns = 0
+
+    for _, p in ipairs(ps.placeables) do
+        if p.spec_husbandryAnimals ~= nil then
+            local name = "?"
+            local okN, n = pcall(function() return p:getName() end)
+            if okN and n ~= nil then name = tostring(n) end
+
+            if fragment == nil or fragment == ""
+               or string.find(string.lower(name), string.lower(fragment), 1, true) ~= nil then
+                barns = barns + 1
+                local okC, clusters = pcall(p.getClusters, p)
+                if not okC or type(clusters) ~= "table" then clusters = {} end
+
+                oc("")
+                oc("---------------------------------------------------------------")
+                oc("BARN %s   clusters=%d", name, #clusters)
+
+                -- predicted litersPerHour, accumulated exactly as the engine does
+                local predMilk, predPallet = {}, {}
+                local predSlurry, predStrawIn, predManure = 0, 0, 0
+
+                for _, cl in ipairs(clusters) do
+                    local sti = cl.subTypeIndex
+                    local okS, st = pcall(asys.getSubTypeByIndex, asys, sti)
+                    if not okS then st = nil end
+                    local age, cnt = cl.age or 0, cl.numAnimals or 0
+                    oc("  cluster: %s  age=%s months  n=%d  health=%s",
+                        st ~= nil and tostring(st.name) or ("subtype " .. tostring(sti)),
+                        tostring(age), cnt, tostring(cl.health))
+
+                    if st ~= nil then
+                        local function acc(v)
+                            local curve, ft = AnimalFoodProbe.asCurve(v)
+                            if curve == nil then return nil, nil end
+                            local ok, per = pcall(curve.get, curve, age)
+                            if not ok or type(per) ~= "number" then return nil, ft end
+                            return per * cnt / 24, ft
+                        end
+
+                        local o = st.output or {}
+                        local i = st.input or {}
+                        local v, ft
+
+                        v, ft = acc(o.milk)
+                        if v ~= nil then predMilk[ft or 0] = (predMilk[ft or 0] or 0) + v end
+                        v, ft = acc(o.pallets)
+                        if v ~= nil then predPallet[ft or 0] = (predPallet[ft or 0] or 0) + v end
+                        v = acc(o.liquidManure); if v ~= nil then predSlurry  = predSlurry  + v end
+                        v = acc(o.manure);       if v ~= nil then predManure  = predManure  + v end
+                        v = acc(i.straw);        if v ~= nil then predStrawIn = predStrawIn + v end
+
+                        -- one full curve dump per SUBTYPE, not per cluster
+                        if not seenSubType[sti] then
+                            seenSubType[sti] = true
+                            oc("  --- curves for %s (sampled once) ---", tostring(st.name))
+                            local kinds = {
+                                { "output.milk",         o.milk },
+                                { "output.pallets",      o.pallets },
+                                { "output.liquidManure", o.liquidManure },
+                                { "output.manure",       o.manure },
+                                { "input.straw",         i.straw },
+                            }
+                            for _, k in ipairs(kinds) do
+                                if k[2] ~= nil then
+                                    local curve, ftIdx, shape = AnimalFoodProbe.asCurve(k[2])
+                                    if curve == nil then
+                                        oc("  %s: UNRECOGNISED SHAPE (%s)", k[1], shape)
+                                    else
+                                        local ftn = nil
+                                        if ftIdx ~= nil and g_fillTypeManager ~= nil then
+                                            local okF, f = pcall(g_fillTypeManager.getFillTypeByIndex,
+                                                                 g_fillTypeManager, ftIdx)
+                                            if okF and f ~= nil then ftn = f.title or f.name end
+                                        end
+                                        oc("  %s  [%s]", k[1], shape)
+                                        AnimalFoodProbe.printCurve(AnimalFoodProbe.sampleCurve(curve), ftn)
+                                    end
+                                end
+                            end
+                            -- Every OTHER output key, so a modded output nobody has
+                            -- named here is visible rather than invisible.
+                            local extra = {}
+                            for key in pairs(o) do
+                                if key ~= "milk" and key ~= "pallets"
+                                   and key ~= "liquidManure" and key ~= "manure" then
+                                    extra[#extra + 1] = tostring(key)
+                                end
+                            end
+                            if #extra > 0 then
+                                oc("  OTHER output keys present: %s", table.concat(extra, ", "))
+                            end
+                        end
+                    end
+                end
+
+                -- ---- THE CONFIRMATION: predicted vs the barn's own field -----
+                oc("  --- predicted litersPerHour vs the live spec ---")
+                local function cmp(label, pred, actual)
+                    if actual == nil then
+                        oc("    %-26s predicted %10.4f   (no live field to compare)", label, pred)
+                        return
+                    end
+                    local d = math.abs(pred - actual)
+                    oc("    %-26s predicted %10.4f   actual %10.4f   %s",
+                        label, pred, actual,
+                        d < 0.0001 and "MATCH" or string.format("DIFF %.4f", d))
+                end
+
+                local sm = p.spec_husbandryMilk
+                if sm ~= nil and type(sm.litersPerHour) == "table" then
+                    for ft, v in pairs(predMilk) do
+                        cmp("milk ft=" .. tostring(ft), v, sm.litersPerHour[ft])
+                    end
+                    for ft, v in pairs(sm.litersPerHour) do
+                        if predMilk[ft] == nil then
+                            cmp("milk ft=" .. tostring(ft) .. " unpredicted", 0, v)
+                        end
+                    end
+                end
+
+                local sp = p.spec_husbandryPallets
+                if sp ~= nil and type(sp.litersPerHour) == "table" then
+                    for ft, v in pairs(predPallet) do
+                        cmp("pallets ft=" .. tostring(ft), v, sp.litersPerHour[ft])
+                    end
+                    for ft, v in pairs(sp.litersPerHour) do
+                        if predPallet[ft] == nil then
+                            cmp("pallets ft=" .. tostring(ft) .. " unpredicted", 0, v)
+                        end
+                    end
+                end
+
+                local sl = p.spec_husbandryLiquidManure
+                if sl ~= nil then cmp("liquidManure", predSlurry, sl.litersPerHour) end
+
+                local ss = p.spec_husbandryStraw
+                if ss ~= nil then
+                    cmp("straw IN", predStrawIn, ss.inputLitersPerHour)
+                    cmp("manure OUT", predManure, ss.outputLitersPerHour)
+                end
+            end
+        end
+    end
+
+    if barns == 0 then oc("no husbandry matched '%s'", tostring(fragment)) end
+    oc("=== done ===")
+end
+
+function AnimalFoodProbe:consoleCommandOutputCurve(fragment)
+    local ok, err = pcall(AnimalFoodProbe.runOutputCurve, fragment)
+    if not ok then return "arOutputCurve failed: " .. tostring(err) end
+    return "arOutputCurve done -- see log.txt"
 end

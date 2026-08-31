@@ -57,100 +57,152 @@
              and overrun is clipped, not wrapped. Budgets in characters at 11px:
              barn 30, factor 12, group 26, the numeric columns 12 each,
              accepts 44. -->
-        <text name="ar_tab_animals"        text="Animal Redux"/>
-        <text name="ar_title_husbandry"    text="Animal Redux - Husbandry Health"/>
 
-        <text name="ar_col_barn"           text="HUSBANDRY"/>
-        <text name="ar_col_animals"        text="ANIMALS"/>
-        <text name="ar_col_productivity"   text="PROD %"/>
-        <text name="ar_col_condition"      text="CONDITION"/>
-        <text name="ar_col_level"          text="LEVEL"/>
-        <text name="ar_col_ofCapacity"     text="OF CAPACITY"/>
-        <text name="ar_col_group"          text="FOOD GROUP"/>
-        <text name="ar_col_needsPerHour"   text="NEEDS / H"/>
-        <text name="ar_col_held"           text="HELD"/>
-        <text name="ar_col_met"            text="MET"/>
-        <text name="ar_col_contributes"    text="CONTRIBUTES"/>
-        <text name="ar_col_ofMax"          text="OF MAX"/>
-        <text name="ar_col_accepts"        text="ACCEPTS"/>
 
-        <text name="ar_sum_line"           text="%s  -  %s  -  eats %.1f L/h  -  trough %s  -  ENGINE %.4f  -  model %.4f%s"/>
-        <text name="ar_sum_noAnimals"      text="%s  -  no animals, so nothing is being fed"/>
-        <text name="ar_sum_none"           text="No animal husbandry on this farm."/>
-        <text name="ar_sum_disagree"       text="   &lt;&lt;&lt; MODEL DISAGREES"/>
-        <text name="ar_sum_herd"           text="   -  %d/%d animals"/>
-        <text name="ar_sum_health"         text=" at %d%% health"/>
-        <text name="ar_sum_prod"           text="   -  PRODUCTIVITY %d%%"/>
-        <text name="ar_sum_grazes"         text="   -  GRAZES A MEADOW: pasture grass feeds these animals without appearing in the trough"/>
 
         <!-- VIEW SELECTOR. Three states in one 300px control: keep them SHORT,
              budget about 18 characters each including the "View: " prefix. -->
-        <text name="ar_view_feed"          text="View: Feed"/>
-        <text name="ar_view_clusters"      text="View: Animals"/>
-        <text name="ar_view_trade"         text="View: Trade"/>
-        <text name="ar_btn_buySell"        text="Buy / Sell"/>
 
         <!-- ANIMALS view. A row is a CLUSTER, a group of animals sharing an age,
              a health and a price, NOT one animal. Column budgets at 11px:
              animal 38, count 13, age 13, health 15, value each 18,
              value total 21, next birth 23, status 23. -->
-        <text name="ar_col_animal"         text="ANIMAL"/>
-        <text name="ar_col_count"          text="COUNT"/>
-        <text name="ar_col_age"            text="AGE"/>
-        <text name="ar_col_healthPct"      text="HEALTH"/>
-        <text name="ar_col_valueEach"      text="VALUE EACH"/>
-        <text name="ar_col_valueTotal"     text="VALUE TOTAL"/>
-        <text name="ar_col_nextBirth"      text="NEXT BIRTH"/>
-        <text name="ar_col_status"         text="STATUS"/>
 
-        <text name="ar_fmt_months"         text="%d mo"/>
-        <text name="ar_birth_in"           text="in %d mo"/>
-        <text name="ar_birth_paused"       text="paused"/>
-        <text name="ar_st_breeding"        text="Breeding"/>
-        <text name="ar_st_tooYoung"        text="Too young (%d mo)"/>
-        <text name="ar_st_lowHealth"       text="Health below %d%%"/>
-        <text name="ar_st_noRoom"          text="NO ROOM: %d lost"/>
 
         <!-- TRADE view. Scaffolding: these are the facts the sell rules will be
              built from. Budgets at 12px: factor 50, value 30, meaning 87. -->
-        <text name="ar_col_factor"         text="FACTOR"/>
-        <text name="ar_col_value"          text="VALUE"/>
-        <text name="ar_col_meaning"        text="WHAT IT MEANS"/>
 
-        <text name="ar_tr_capacity"        text="Pen capacity"/>
-        <text name="ar_tr_capacityM"       text="%d free slot(s)"/>
-        <text name="ar_tr_births"          text="Births next cycle"/>
-        <text name="ar_tr_birthsNone"      text="nothing is breeding right now"/>
-        <text name="ar_tr_birthsFit"       text="the pen has room for all of them"/>
-        <text name="ar_tr_birthsLost"      text="%d would be DISCARDED, and the gestation spent with them"/>
-        <text name="ar_tr_health"          text="Herd health"/>
-        <text name="ar_tr_healthLow"       text="%d animal(s) below the 75%% breeding gate: paused, but NOT losing progress"/>
-        <text name="ar_tr_healthOk"        text="every animal is above the 75% breeding gate"/>
-        <text name="ar_tr_value"           text="Herd value now"/>
-        <text name="ar_tr_valueM"          text="what the whole barn would fetch at today's health"/>
-        <text name="ar_tr_valueFull"       text="Value at full health"/>
-        <text name="ar_tr_valueGap"        text="%s recoverable by feeding alone"/>
-        <text name="ar_tr_valueNoGap"      text="already at full value"/>
-        <text name="ar_tr_rules"           text="Sell rules"/>
-        <text name="ar_tr_rulesValue"      text="read only"/>
-        <text name="ar_tr_rulesM"          text="nothing is sold automatically. Buy / Sell opens the game's own screen for this barn."/>
+        <!-- ================= HERD INSPECTOR (the second Animals tab) =========
+             hi_col_* are fixed-width table headers and are CLIPPED, not wrapped.
+             Budgets: animal 130 / barn 220 / count 60 / age 60 / health 70 /
+             repro 120 / litres 100 / each 100 / total 134 px at 11px text, so
+             about 16 characters per 100px. Keep them short. -->
+        <text name="ar_hi_panelTitle"       text="ANIMALS, FEED AND HERD VALUE"/>
+        <text name="ar_hi_page_title"         text="ANIMAL REDUX - HERD INSPECTOR"/>
+        <text name="ar_hi_page_title_barn"    text="ANIMAL REDUX - BARN INSPECTOR"/>
+        <text name="ar_hi_tab_title"          text="Herd Inspector"/>
+        <text name="ar_hi_view_groups"        text="VIEW: GROUPS"/>
+        <text name="ar_hi_view_barn"          text="VIEW: BARN"/>
+        <text name="ar_hi_filter_all"         text="All animals"/>
+        <!-- THE PERIOD SELECTOR IS THE PAGE'S ONLY UNIT LEGEND, so these three
+             strings carry a job the column headers used to do. Keep them short:
+             the box is 300px and the arrows take some of it. -->
+        <text name="ar_hi_per_cycle"          text="PER: CYCLE (1 HOUR)"/>
+        <text name="ar_hi_per_month"          text="PER: MONTH"/>
+        <text name="ar_hi_per_year"           text="PER: YEAR"/>
+        <!-- the panel headline, which follows the same selector. 130px at 11px,
+             so about 20 characters. -->
+        <text name="ar_hi_profit_cycle"       text="PROFIT / CYCLE"/>
+        <text name="ar_hi_profit_month"       text="PROFIT / MO"/>
+        <text name="ar_hi_profit_year"        text="PROFIT / YR"/>
+        <text name="ar_hi_col_animal"         text="ANIMAL"/>
+        <text name="ar_hi_col_barn"           text="BARN"/>
+        <text name="ar_hi_col_count"          text="COUNT"/>
+        <text name="ar_hi_col_age"            text="AGE"/>
+        <text name="ar_hi_col_health"         text="HEALTH"/>
+        <text name="ar_hi_col_repro"          text="REPRODUCTION"/>
+        <text name="ar_hi_col_each"           text="VALUE EACH"/>
+        <text name="ar_hi_col_total"          text="VALUE TOTAL"/>
+        <text name="ar_hi_col_groupValue"     text="GROUP VALUE"/>
+        <text name="ar_hi_col_change"         text="VALUE +/-"/>
+        <text name="ar_hi_col_foodGroup"      text="FOOD GROUP"/>
+        <text name="ar_hi_col_held"           text="HELD"/>
+        <text name="ar_hi_col_needs"          text="NEEDS"/>
+        <text name="ar_hi_col_costPerH"       text="COST"/>
+        <text name="ar_hi_col_costNow"        text="COST NOW"/>
+        <text name="ar_hi_group_bedding"      text="Bedding"/>
+        <text name="ar_hi_group_water"        text="Water"/>
+
+        <!-- THE BUY / SELL WINDOW. The money labels sit in a 190px column at 12px,
+             so keep them under about 30 characters; the empty-state sentences have
+             a 760px line and can be a sentence. -->
+        <text name="ar_hi_btn_trade"          text="Buy / Sell"/>
+        <text name="ar_td_title"              text="Animal Redux - Buy / Sell"/>
+        <text name="ar_td_title_buy"          text="Animal Redux - Buy Animals"/>
+        <text name="ar_td_title_sell"         text="Animal Redux - Sell Animals"/>
+        <text name="ar_td_mode_sell"          text="SELL ANIMALS"/>
+        <text name="ar_td_mode_buy"           text="BUY ANIMALS"/>
+        <text name="ar_td_noBarn"             text="no barn"/>
+        <text name="ar_td_col_animal"         text="GROUP"/>
+        <text name="ar_td_col_offered"        text="OFFERED"/>
+        <text name="ar_td_col_age"            text="AGE"/>
+        <text name="ar_td_barnFree"           text="%s   -   %d free slots"/>
+        <text name="ar_td_nameCount"          text="%s   x%d"/>
+        <text name="ar_td_col_each"           text="EACH"/>
+        <text name="ar_td_col_eachNet"        text="NET EACH"/>
+        <text name="ar_td_col_eachCost"       text="COST EACH"/>
+        <text name="ar_td_amount"             text="HOW MANY"/>
+        <text name="ar_td_qtyAll"             text="%d  (all)"/>
+        <text name="ar_td_months"             text="%d mo"/>
+        <text name="ar_td_less"               text="-1"/>
+        <text name="ar_td_more"               text="+1"/>
+        <text name="ar_td_all"                text="Max"/>
+        <text name="ar_td_commit"             text="Confirm"/>
+        <text name="ar_td_buyNow"             text="Buy"/>
+        <text name="ar_td_sellNow"            text="Sell"/>
+        <text name="ar_td_close"              text="Close"/>
+        <text name="ar_td_lbl_value"          text="Sale value"/>
+        <text name="ar_td_lbl_price"          text="Price"/>
+        <text name="ar_td_lbl_fee"            text="Dealer fee"/>
+        <text name="ar_td_lbl_totalGain"      text="TOTAL GAINED"/>
+        <text name="ar_td_lbl_totalCost"      text="TOTAL COST"/>
+        <text name="ar_td_empty_client"       text="Trading runs on the server only."/>
+        <text name="ar_td_empty_noctrl"       text="The animal dealer is not available in this build."/>
+        <text name="ar_td_empty_buy"          text="The dealer has nothing this barn can take."/>
+        <text name="ar_td_empty_sell"         text="This barn has no animals to sell."/>
+        <text name="ar_td_note_full"          text="This barn has no free slots."/>
+        <text name="ar_td_note_none"          text="Nothing in this group to sell."/>
+        <text name="ar_td_sold"               text="Sold %d."/>
+        <text name="ar_td_bought"             text="Bought %d."/>
+        <text name="ar_td_failed"             text="Refused: %s"/>
+        <text name="ar_hi_auto"               text="auto"/>
+        <text name="ar_hi_col_product"        text="PRODUCT"/>
+        <text name="ar_hi_col_prodRate"       text="PROD RATE"/>
+        <text name="ar_hi_col_rec"            text="RECOMMENDATION"/>
+        <!-- THE RECOMMENDATION SENTENCES. The column is 204px at 12px, so keep each
+             under about 34 characters: this cell TRUNCATES, it does not wrap, and a
+             clipped verdict is worse than a shorter one (5.55). %s is money, %d a
+             count or a number of months. -->
+        <text name="ar_hi_rec_calf"           text="Sell newborns - nursery pays more"/>
+        <text name="ar_hi_rec_headroom"       text="Sell %d - pen full, births lost"/>
+        <text name="ar_hi_rec_peak"           text="Sell - past peak, losing %s / mo"/>
+        <text name="ar_hi_rec_plan"           text="Sell %d - see the Animals tab"/>
+        <text name="ar_hi_rec_unwell"         text="Feed - too unwell to breed (%d%%)"/>
+        <text name="ar_hi_rec_young"          text="Keep - producing in %d mo"/>
+        <text name="ar_hi_rec_growing"        text="Keep - still growing"/>
+        <text name="ar_hi_rec_appreciating"   text="Keep - gaining %s / mo"/>
+        <text name="ar_hi_rec_outearns"       text="Keep - earns %s / mo over decline"/>
+        <text name="ar_hi_rec_declining"      text="Sell - old, losing %s / mo"/>
+        <text name="ar_hi_rec_steady"         text="Keep - steady earner, %s / mo"/>
+        <text name="ar_hi_rec_unprofitable"   text="Sell - costs more than it earns"/>
+        <text name="ar_hi_rec_unknown"        text="-"/>
+
+        <!-- THE TWO PANEL ADVICE LINES. Budgets differ and both TRUNCATE rather than
+             wrap once they overrun: the feed line is 480px at 11px (about 80
+             characters, one line) and the births line is 108px over two (about 36
+             in total). %s is a group and its products, %d a count. -->
+        <text name="ar_adv_feed_ok"           text="Food factor 100% - no action needed"/>
+        <text name="ar_adv_feed_provide"      text="Provide %s to raise productivity"/>
+        <text name="ar_adv_feed_grazing"      text="Grazing - the meadow is feeding them"/>
+        <text name="ar_adv_birth_sell"        text="Sell %d to free slots for births"/>
+        <text name="ar_adv_birth_lost"        text="%d births lost - pen is full"/>
+        <text name="ar_adv_birth_room"        text="No action - %d slots for births"/>
+        <text name="ar_adv_birth_none"        text="No action - nothing is breeding"/>
+        <text name="ar_adv_birth_ok"          text="No action"/>
+        <text name="ar_hi_col_sellValue"      text="VALUE"/>
+        <text name="ar_hi_repro_young"        text="too young"/>
+        <text name="ar_hi_repro_unwell"       text="below the 75% gate"/>
+        <text name="ar_hi_repro_due"          text="breeding - due %d mo"/>
+        <text name="ar_hi_repro_breeding"     text="breeding"/>
+        <text name="ar_hi_fmt_months"         text="%d mo"/>
+
+        <!-- the summary table over the Trade view's detail table. Every figure
+             is PER MONTH, including both halves of the book-value pair. -->
+
 
         <!-- The recommendation the rules produce, read only. WHAT IT MEANS is the
              widest column (about 87 characters at 12px) and carries the reason a
              sale is advised, which is the whole point of the view. -->
-        <text name="ar_tr_sell"            text="SELL %d x %s"/>
-        <text name="ar_tr_whyHeadroom"     text="headroom: these slots are needed or next cycle's births are destroyed"/>
-        <text name="ar_tr_whyPeak"         text="past peak: worth less every month it is kept, and holding gains nothing"/>
-        <text name="ar_tr_total"           text="Recommended total"/>
-        <text name="ar_tr_totalHead"       text="%d head"/>
-        <text name="ar_tr_totalM"          text="%s at today's prices"/>
-        <text name="ar_tr_nothing"         text="sell nothing"/>
-        <text name="ar_tr_nothingM"        text="the pen has room and nothing is past its peak"/>
-        <text name="ar_tr_note"            text="Note"/>
-        <text name="ar_tr_rulesNA"         text="unavailable"/>
-        <text name="ar_tr_rulesNAM"        text="the sell rules module did not load, so no recommendation is shown"/>
-        <text name="ar_tr_noteHeld"        text="peak sales held: at %d%% health these would realise %d%% of book value"/>
-        <text name="ar_tr_noteBlocked"     text="still %d slot(s) short: the breeder floor of %d blocks any further sale"/>
-        <text name="ar_tr_noteLost"        text="%d birth(s) would still be discarded next cycle"/>
+
     </texts>
 </l10n>

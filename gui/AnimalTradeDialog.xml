@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!-- Animal Redux: the BUY / SELL window.
+
+     Laid out on the base game's own animal screen, which reads top to bottom:
+     WHAT you are doing, WHERE, WHICH animals, HOW MANY, WHAT IT COSTS, and then the
+     button that commits. The base screen puts the money immediately above its
+     Buy / Sell button for the same reason - it is the last thing read before an
+     irreversible click.
+
+     THE SHELL IS COPIED VERBATIM from DistributionInputsDialog, not composed:
+     18.7 and 18.13 both record what happens when a dialog root is invented, and the
+     structure here is load-bearing - newLayer, the fullscreen bg, the three
+     ThreePartBitmaps, the content container, and buttons in a BoxLayout.
+
+     LAYOUT NOTE, inherited with the shell: the SDList profile is
+     anchorStretchingYLeft + pivotTopLeft, so list elements are positioned from the
+     BOX'S LEFT EDGE with POSITIVE X. Only the centre-anchored Text elements (title
+     and subtitle) sit at x=0. Buttons must use profile "buttonOK" with a capital K;
+     the lowercase spelling renders as a white bar.
+
+     THE MONEY IS ITEMISED rather than shown as one figure. 13.5 measured a flat
+     100-per-animal dealer fee, and a player who reads "sell 7 for 4,231" and
+     receives 3,531 has been misled by the screen, not by the game. -->
+<GUI name="AnimalTradeDialog" onOpen="onOpen" onClose="onClose">
+    <GuiElement type="empty" profile="newLayer" />
+    <Bitmap profile="dialogFullscreenBg" id="dialogBg" />
+
+    <GuiElement profile="SDInputsDialogBox" id="dialogElement">
+        <ThreePartBitmap profile="fs25_dialogBgMiddleSmall" />
+        <ThreePartBitmap profile="fs25_dialogBgTopSmall" />
+        <ThreePartBitmap profile="fs25_dialogBgBottom" />
+
+        <GuiElement profile="fs25_dialogContentContainer">
+            <Text profile="fs25_dialogTitle" id="dialogTitleElement" text="$l10n_ar_td_title" position="0px -30px" />
+            <Text profile="fs25_dialogText"  id="dialogTextElement"  text="" position="0px -78px" />
+
+            <!-- 1. WHAT, and 2. WHERE. One choice each, so selectors rather than
+                 buttons: the footer is where actions live on this dialog.
+                 The barn box is HIDDEN when the dialog was opened from a barn view,
+                 because there is then nothing to choose.
+                 40 + 300 = 340 | 360 + 500 = 860 -->
+            <Bitmap profile="fs25_multiTextOptionContainer" position="40px -118px" size="300px 40px"
+                    imageColor="0 0 0 0">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="modeOption"
+                                 onClick="onModeChanged"
+                                 textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="360px -118px" size="500px 40px"
+                    imageColor="0 0 0 0" id="barnBox">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="barnOption"
+                                 onClick="onBarnChanged"
+                                 textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <!-- 3. WHICH. The list is the same shape in both modes - a row per thing
+                 that can be traded, and what ONE of them is worth - so one table
+                 serves and only the header wording changes.
+                 12+24=36 | 48+250=298 | 306+80=386 | 394+100=494 | 502+120=622
+                 | 630+130=760 -->
+            <Bitmap profile="SDList" position="40px -170px" size="760px 34px">
+                <Text profile="SDHeaderLeft"  position="48px 0px"  size="280px 34px" textSize="11px"
+                      text="$l10n_ar_td_col_animal" id="hdrAnimal"/>
+                <Text profile="SDHeaderLeft"  position="336px 0px" size="110px 34px" textSize="11px"
+                      text="$l10n_ar_td_col_age"/>
+                <Text profile="SDHeaderLeft"  position="454px 0px" size="140px 34px" textSize="11px"
+                      text="$l10n_ar_td_col_each"/>
+                <Text profile="SDHeaderLeft"  position="602px 0px" size="140px 34px" textSize="11px"
+                      text="$l10n_ar_td_col_eachNet" id="hdrEachNet"/>
+                <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
+            </Bitmap>
+            <GuiElement profile="SDList" position="40px -208px" size="760px 492px">
+                <!-- onClick BELONGS TO THE SMOOTHLIST, NOT THE ROW. DR 6.29: a ListItem
+                     handler runs during CHILD propagation, which happens BEFORE the list
+                     applies the selection - so it reads a stale index, which is exactly
+                     the "one step behind" this dialog showed. The list's own onClick is
+                     raised from notifyClick AFTER the selection is applied. -->
+                <SmoothList profile="SDList" id="tradeList" position="0px 0px" size="760px 492px"
+                            onSelectionChanged="onRowChanged" onClick="onRowClicked">
+                    <ListItem profile="SDListItemStats" name="rowTemplate" size="760px 42px">
+                        <Bitmap position="12px 9px" size="24px 24px" name="fillIcon" imageColor="1 1 1 1" />
+                        <Text profile="SDRowCell" position="48px 0px"  size="280px 42px" textSize="12px" name="tdName" />
+                        <Text profile="SDRowCell" position="336px 0px" size="110px 42px" textSize="12px" name="tdAge" />
+                        <Text profile="SDRowCell" position="454px 0px" size="140px 42px" textSize="12px" name="tdEach" />
+                        <Text profile="SDRowCell" position="602px 0px" size="140px 42px" textSize="12px" name="tdEachNet" />
+                    </ListItem>
+                </SmoothList>
+                <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px" size="12px 492px" with="anchorTopRight">
+                    <Slider profile="fs25_listSlider" size="6px 484px" dataElementId="tradeList" id="tradeSlider" />
+                </ThreePartBitmap>
+            </GuiElement>
+            <!-- inside a Bitmap for the same reason as the money block above -->
+            <Bitmap profile="SDList" position="40px -260px" size="760px 40px" imageColor="0 0 0 0"
+                    id="emptyBox" visible="false">
+                <Text profile="SDBarLabel" position="12px -6px" size="736px 30px" textSize="14px"
+                      id="emptyNote"/>
+            </Bitmap>
+
+            <!-- 4. HOW MANY and 5. WHAT IT COSTS, together on the right: the amount is
+                 the only thing that changes the money, and a reader should not have to
+                 look across the dialog to see the effect.
+                 820 + 340 = 1160, the box's own right margin. -->
+            <Bitmap profile="SDList" position="820px -170px" size="340px 34px">
+                <Text profile="SDHeaderLeft" position="12px 0px" size="328px 34px" textSize="11px"
+                      text="$l10n_ar_td_amount"/>
+                <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -212px" size="340px 40px"
+                    imageColor="0 0 0 0">
+                <!-- wrap: past the top comes back to 1 and below 1 goes to the top
+                     (author's call). MultiTextOptionElement defaults it TRUE, but a
+                     profile can turn it off, so it is asserted here rather than assumed. -->
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="amountOption"
+                                 onClick="onAmountChanged" wrap="true"
+                                 textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <!-- THE MONEY SITS BOTTOM RIGHT, ONE POSITIONED BITMAP PER ROW.
+                 A Text placed DIRECTLY in fs25_dialogContentContainer does not render
+                 at all - SDBarLabel brings its own anchoring from its profile, so an
+                 absolute x/y in that container means nothing to it (DR 5.70). The fix
+                 is the pattern every list header here already uses: a positioned
+                 Bitmap, children inside it.
+                 ONE BITMAP PER ROW rather than one tall box with offsets inside it,
+                 because the offsets inside such a box are not measured the way an
+                 absolute position is - the first attempt drew its separator lines
+                 straight through the labels. A row container per row has no offsets
+                 to get wrong, and the rule above is the ONLY layout rule in play.
+                 THE SEPARATOR IS fs25_lineSeparatorBottom, the profile the headers use,
+                 rather than a graph_pixel bitmap placed by hand.
+                 12+190=202 | 210+118=328, inside a 340px box. -->
+            <Bitmap profile="SDList" position="820px -588px" size="340px 30px" imageColor="0 0 0 0">
+                <Text profile="SDBarLabel"      position="12px 0px"  size="190px 30px" textSize="13px" id="lblGross"/>
+                <Text profile="SDBarLabelRight" position="210px 0px" size="118px 30px" textSize="13px" id="valGross"/>
+            </Bitmap>
+            <Bitmap profile="SDList" position="820px -620px" size="340px 30px" imageColor="0 0 0 0">
+                <Text profile="SDBarLabel"      position="12px 0px"  size="190px 30px" textSize="13px" id="lblFee"/>
+                <Text profile="SDBarLabelRight" position="210px 0px" size="118px 30px" textSize="13px" id="valFee"/>
+            </Bitmap>
+            <Bitmap profile="SDList" position="820px -660px" size="340px 40px" imageColor="0 0 0 0">
+                <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
+                <Text profile="SDBarLabel"      position="12px 0px"  size="190px 40px" textSize="15px" id="lblTotal"/>
+                <Text profile="SDBarLabelRight" position="210px 0px" size="118px 40px" textSize="20px" id="valTotal"/>
+            </Bitmap>
+            <Bitmap profile="SDList" position="820px -266px" size="340px 40px" imageColor="0 0 0 0">
+                <Text profile="SDBarLabel" position="12px 0px" size="316px 40px" textSize="12px"
+                      textMaxNumLines="2" id="noteText"/>
+            </Bitmap>
+        </GuiElement>
+
+        <BoxLayout profile="fs25_dialogButtonBox" id="buttonsPC">
+            <Button profile="buttonOK"   text="$l10n_ar_td_less"  onClick="onAmountDown" id="lessButton"  inputAction="MENU_PAGE_PREV" />
+            <Bitmap profile="fs25_dialogButtonBoxSeparator" />
+            <Button profile="buttonOK"   text="$l10n_ar_td_more"  onClick="onAmountUp"   id="moreButton"  inputAction="MENU_PAGE_NEXT" />
+            <Bitmap profile="fs25_dialogButtonBoxSeparator" />
+            <Button profile="buttonOK"   text="$l10n_ar_td_all"   onClick="onAmountAll"  id="allButton"   inputAction="MENU_EXTRA_1" />
+            <Bitmap profile="fs25_dialogButtonBoxSeparator" />
+            <Button profile="buttonOK"   text="$l10n_ar_td_commit" onClick="onCommit"    id="commitButton" inputAction="MENU_ACCEPT" />
+            <Bitmap profile="fs25_dialogButtonBoxSeparator" />
+            <Button profile="buttonBack" text="$l10n_ar_td_close" onClick="onClickBack"  id="noButton" />
+        </BoxLayout>
+    </GuiElement>
+</GUI>
