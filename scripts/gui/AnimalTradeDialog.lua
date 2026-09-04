@@ -121,10 +121,9 @@ function AnimalTradeDialog:barn()
 end
 
 function AnimalTradeDialog:initSelectors()
-    if self.modeOption ~= nil and self.modeOption.setTexts ~= nil then
-        self.modeOption:setTexts({ l10n("ar_td_mode_sell", "SELL ANIMALS"),
-                                   l10n("ar_td_mode_buy",  "BUY ANIMALS") })
-        if self.modeOption.setState ~= nil then self.modeOption:setState(self.mode) end
+    -- THE MODE TABS. Two peers, so tabs rather than a selector.
+    if AnimalTabs ~= nil then
+        AnimalTabs.render(self, AnimalTradeDialog.modeLabels(), self.mode)
     end
     local names = {}
     for _, b in ipairs(self.barns) do names[#names + 1] = tostring(b.name or "?") end
@@ -234,6 +233,11 @@ end
 function AnimalTradeDialog:refresh()
     local buy = (self.mode == AnimalTrade.MODE_BUY)
     local b = self:barn()
+
+    -- REDRAWN EVERY REFRESH, not only at open: the plate is a separate element
+    -- from the button, so a mode change that did not repaint would leave the green
+    -- block on the tab the player just left.
+    if AnimalTabs ~= nil then AnimalTabs.render(self, AnimalTradeDialog.modeLabels(), self.mode) end
 
     setText(self.dialogTitleElement, buy and l10n("ar_td_title_buy", "Animal Redux - Buy Animals")
                                          or l10n("ar_td_title_sell", "Animal Redux - Sell Animals"))
@@ -452,15 +456,25 @@ end
 -- ---------------------------------------------------------------------------
 -- CONTROLS
 -- ---------------------------------------------------------------------------
-function AnimalTradeDialog:onModeChanged(state)
-    local o = self.modeOption
-    if type(state) ~= "number" and o ~= nil and o.getState ~= nil then state = o:getState() end
-    if type(state) ~= "number" or state < 1 or state > 2 then return end
-    self.mode = state
+---THE MODE LABELS, in one place because both the strip and the click handler
+-- need them. SELL is index 1 and BUY index 2, matching AnimalTrade's own
+-- constants -- the tab ORDER is the enum, not a display choice.
+function AnimalTradeDialog.modeLabels()
+    return { l10n("ar_td_mode_sell", "SELL ANIMALS"), l10n("ar_td_mode_buy", "BUY ANIMALS") }
+end
+
+---A TAB CLICK, bounds-checked against the labels actually drawn.
+function AnimalTradeDialog:selectMode(i)
+    local m = AnimalTabs ~= nil and AnimalTabs.pick(AnimalTradeDialog.modeLabels(), i) or nil
+    if m == nil or m == self.mode then return end
+    self.mode = m
     -- the row that was defaulted for a SALE means nothing in the dealer's catalogue
     self.preferCluster, self.rowIndex, self.result = nil, 1, nil
     self:rebuild()
 end
+
+function AnimalTradeDialog:onTab1() return self:selectMode(1) end
+function AnimalTradeDialog:onTab2() return self:selectMode(2) end
 
 function AnimalTradeDialog:onBarnChanged(state)
     local o = self.barnOption

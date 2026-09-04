@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!-- Animal Redux: this mod's own GUI profiles.
+
+     AR HAS NEVER HAD ONE UNTIL NOW. Every profile its layouts name is either the
+     base game's or one of DR's (SDList, SDRowCell, SDHeaderLeft, SDBarLabel,
+     SDInputsDialogBox), which is a dependency worth being aware of but is not
+     what this file is for. It exists for the TEXT PICKER, whose two pieces have
+     no stock equivalent.
+
+     BOTH ARE ANCHORED, NOT POSITIONED. DR 5.70 records a text input and its label
+     ignoring an absolute x/y outright, because a stock profile places itself; and
+     DR 5.87a records that "with" is read on PROFILES ONLY and is silently ignored
+     on an element. So the anchoring lives here, where it is actually read.
+
+     THE 80px INSET IS THE TWO ARROWS. fs25_multiTextOptionLeft and Right are 40px
+     each and anchor to the ends of their container, so 40 off each side leaves the
+     middle to the field. It is DELIBERATELY WIDER THAN THE STOCK TEXT PROFILE'S
+     50px total: a text input CONSUMES a mouse click where a text label does not,
+     so any overlap with an arrow would be a dead arrow.
+
+     COMMENT RULE: no double hyphen inside an XML comment. It is a parse error and
+     FS25 answers it by not loading the layout at all; DR records it costing six
+     builds. tools/check_xml.py catches it before a deploy. -->
+<GUIProfiles>
+
+    <!-- THE FIELD. Transparent by inheritance: fs25_textInput sets imageSliceId
+         noSlice and every image colour to zero, so the multiTextOption background
+         behind it shows through and the control looks exactly like the selector it
+         replaces. maxInputTextWidth is cut to the 260px this actually occupies
+         (340 box less the two 40px arrows), from the 229 the stock profile sizes
+         for its own 249px box. -->
+    <Profile name="ARNumberInput" extends="fs25_textInput" with="anchorStretchingYStretchingX">
+        <size value="100% 100%" />
+        <absoluteSizeOffset value="80px 0px" />
+
+        <textSize value="16px" />
+        <textAlignment value="center" />
+        <textColor value="0.9 0.9 0.9 1" />
+        <maxInputTextWidth value="240px" />
+    </Profile>
+
+    <!-- THE GREY PROMPT that sits over the field while it is empty. A SEPARATE
+         ELEMENT because TextInputElement has no placeholder at all (imePlaceholder
+         reaches the console IME overlay and never the field), and because a prompt
+         held in the field's own text becomes real input the moment a character is
+         appended to it.
+
+         It cannot steal the click: TextElement declares no mouseEvent of its own
+         and GuiElement:mouseEvent only propagates. Read in the shipped source,
+         not assumed, because a prompt that ate the click would make the field
+         unfocusable and read as a dead control.
+
+         SMALLER AND DIMMER THAN THE VALUE, so a prompt is never mistaken for a
+         number that has been chosen. The value is 16px at 0.9 grey. -->
+    <Profile name="ARNumberHint" extends="fs25_textDefault" with="anchorStretchingYStretchingX">
+        <size value="100% 100%" />
+        <absoluteSizeOffset value="80px 0px" />
+
+        <textSize value="14px" />
+        <textAlignment value="center" />
+        <textColor value="0.5 0.5 0.5 1" />
+        <textMaxNumLines value="1" />
+    </Profile>
+
+
+    <!-- THE BASE GAME'S OWN ON / OFF SWITCH, the one the Game Settings screen uses
+         for Traffic and Snow. Requested 2026-09-02 in place of a two entry
+         selector ring: a ring makes a yes/no answer look like a list you step
+         through, and both states are visible at once on a real switch.
+
+         BinaryOptionElement EXTENDS MultiTextOptionElement, so it answers setTexts,
+         setState, getState and raises onClick exactly the same way. That is what
+         makes this a swap of the element rather than of the handler.
+
+         EVERY PART OF IT IS PERCENTAGE SIZED (the two halves are 50% 100%, the
+         background and slider stretch), so it scales to whatever box it is put in.
+         Stretched to fill the 340px slot so it lines up with the typed fields
+         above and below it rather than sitting narrower in the middle. -->
+    <Profile name="ARToggle" extends="fs25_binaryOption" with="anchorStretchingYStretchingX">
+        <size value="100% 100%" />
+    </Profile>
+
+
+    <!-- AN IN-ROW ARROW. DR 5.64 proved a Button can live inside a SmoothList row
+         and be clicked: SmoothListElement:mouseEvent calls its SUPERCLASS FIRST and
+         gates its own row selection on "not eventUsed", so a child that consumes a
+         click fires AND the row does not also select.
+
+         THE ANCHOR IS THE ONLY OVERRIDE, per that entry's hard-won rule: resize the
+         stock arrow and it samples the UI atlas wrongly and renders as garbled
+         blocks. fs25_multiTextOptionRight anchors to its PARENT's right edge, which
+         in a row is the far end of the row rather than the end of its cell, so it is
+         re-anchored LEFT and then placed by position like everything else. The left
+         arrow needs no profile at all: the stock one is already left anchored.
+
+         AR's OWN rather than DR's SDRowArrowRight, which is identical: this mod
+         already leans on DR for a dozen profiles and there is no reason to add a
+         thirteenth for one line. -->
+    <Profile name="ARRowArrowRight" extends="fs25_multiTextOptionRight" with="anchorStretchingYLeft" />
+
+</GUIProfiles>

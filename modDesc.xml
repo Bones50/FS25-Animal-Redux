@@ -26,14 +26,30 @@ Feedback/Issues: https://github.com/Bones50/FS25-Animal-Redux
 
     <extraSourceFiles>
         <sourceFile filename="scripts/AnimalRedux.lua"/>
+        <!-- EARLY: it owns the savegame file and every other script registers a
+             section with it at file scope, so it has to exist by then. -->
+        <sourceFile filename="scripts/AnimalPersist.lua"/>
+        <sourceFile filename="scripts/AnimalSettings.lua"/>
+        <sourceFile filename="scripts/AnimalHelp.lua"/>
         <sourceFile filename="scripts/AnimalHerdData.lua"/>
         <sourceFile filename="scripts/AnimalFeedModel.lua"/>
         <sourceFile filename="scripts/AnimalEconomics.lua"/>
         <sourceFile filename="scripts/AnimalSellRules.lua"/>
         <sourceFile filename="scripts/AnimalSellExecutor.lua"/>
+        <sourceFile filename="scripts/AnimalSellPolicy.lua"/>
         <sourceFile filename="scripts/AnimalTrade.lua"/>
+        <!-- AFTER AnimalTrade: it commits through it, and after AnimalPersist,
+             whose register() it calls at file scope. -->
+        <sourceFile filename="scripts/AnimalBuySchedule.lua"/>
+        <!-- AFTER AnimalBuySchedule: it calls that module for the month arithmetic. -->
+        <sourceFile filename="scripts/AnimalSellSchedule.lua"/>
+        <sourceFile filename="scripts/AnimalHerdPolicy.lua"/>
+        <sourceFile filename="scripts/gui/TextPicker.lua"/>
+        <sourceFile filename="scripts/gui/AnimalTabs.lua"/>
         <sourceFile filename="scripts/gui/HerdInspectorPage.lua"/>
         <sourceFile filename="scripts/gui/AnimalTradeDialog.lua"/>
+        <sourceFile filename="scripts/gui/AnimalBuyScheduleDialog.lua"/>
+        <sourceFile filename="scripts/gui/AnimalRulesDialog.lua"/>
         <!-- TEMPORARY dev probe. Remove with the file once the feed model is settled. -->
         <sourceFile filename="scripts/AnimalFoodProbe.lua"/>
     </extraSourceFiles>

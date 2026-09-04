@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!-- Animal Redux: THE SELL RULES for ONE barn-breed.
+
+     Opened from the BREEDS tab, which is where the purpose is set, so this window
+     never has to ask which barn or which breed. Its subtitle says both.
+
+     THE QUESTIONS DEPEND ON THE PURPOSE. A producing herd is never asked to
+     reserve room for births, and a breeding one is never asked whether to sell
+     newborns as a separate thing from running as a nursery. Six generic slots,
+     filled by AnimalHerdPolicy.fieldsFor and hidden when a purpose asks fewer.
+
+     THE SHELL IS COPIED VERBATIM from AnimalBuyScheduleDialog, which copied it
+     from AnimalTradeDialog, which copied it from DistributionInputsDialog. 18.7
+     and 18.13 record what happens when a dialog root is invented.
+
+     LAYOUT NOTE, inherited with the shell: SDList is anchorStretchingYLeft +
+     pivotTopLeft, so list elements position from the BOX'S LEFT EDGE with
+     POSITIVE X. Only the centre anchored title and subtitle sit at x=0. Buttons
+     must use profile "buttonOK" with a capital K.
+
+     COMMENT RULE: no double hyphen inside an XML comment. It is a parse error and
+     FS25 answers it by not loading the dialog at all. tools/check_xml.py catches
+     it before a deploy; it has cost this project thirteen builds. -->
+<GUI name="AnimalRulesDialog" onOpen="onOpen" onClose="onClose">
+    <GuiElement type="empty" profile="newLayer" />
+    <Bitmap profile="dialogFullscreenBg" id="dialogBg" />
+
+    <GuiElement profile="SDAdvDialogBox" id="dialogElement">
+        <ThreePartBitmap profile="fs25_dialogBgMiddleSmall" />
+        <ThreePartBitmap profile="fs25_dialogBgTopSmall" />
+        <ThreePartBitmap profile="fs25_dialogBgBottom" />
+
+        <GuiElement profile="fs25_dialogContentContainer">
+            <Text profile="fs25_dialogTitle" id="dialogTitleElement" text="$l10n_ar_rul_title" position="0px -30px" />
+            <Text profile="fs25_dialogText"  id="dialogTextElement"  text="" position="0px -78px" />
+
+            <!-- WHAT THIS HERD IS KEPT FOR, stated rather than assumed: the answers
+                 below only make sense against it, and it is set on the tab behind
+                 this window rather than here. -->
+            <Bitmap profile="SDList" position="40px -118px" size="1320px 34px" imageColor="0 0 0 0">
+                <Text profile="SDBarLabel" position="12px 0px" size="1296px 34px" textSize="14px" id="purposeText"/>
+            </Bitmap>
+
+            <!-- SIX GENERIC SLOTS at a 62px pitch (label 20 + option 38 + 4), the
+                 first at -166, so slot 6 ends at -534. Each is hidden when the
+                 current purpose asks fewer questions than six. -->
+            <Bitmap profile="SDList" position="40px -166px" size="640px 20px" imageColor="0 0 0 0" id="lblBox1">
+                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl1" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="700px -166px" size="620px 38px"
+                    imageColor="0 0 0 0" id="optBox1">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt1" wrap="true"
+                                 onClick="onOpt1" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="40px -228px" size="640px 20px" imageColor="0 0 0 0" id="lblBox2">
+                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl2" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="700px -228px" size="620px 38px"
+                    imageColor="0 0 0 0" id="optBox2">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt2" wrap="true"
+                                 onClick="onOpt2" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="40px -290px" size="640px 20px" imageColor="0 0 0 0" id="lblBox3">
+                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl3" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="700px -290px" size="620px 38px"
+                    imageColor="0 0 0 0" id="optBox3">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt3" wrap="true"
+                                 onClick="onOpt3" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="40px -352px" size="640px 20px" imageColor="0 0 0 0" id="lblBox4">
+                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl4" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="700px -352px" size="620px 38px"
+                    imageColor="0 0 0 0" id="optBox4">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt4" wrap="true"
+                                 onClick="onOpt4" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="40px -414px" size="640px 20px" imageColor="0 0 0 0" id="lblBox5">
+                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl5" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="700px -414px" size="620px 38px"
+                    imageColor="0 0 0 0" id="optBox5">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt5" wrap="true"
+                                 onClick="onOpt5" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="40px -476px" size="640px 20px" imageColor="0 0 0 0" id="lblBox6">
+                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl6" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="700px -476px" size="620px 38px"
+                    imageColor="0 0 0 0" id="optBox6">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt6" wrap="true"
+                                 onClick="onOpt6" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <!-- WHAT THE TOUCHED RULE DOES, in a sentence. These settings are not
+                 self explanatory from a short label and there is nowhere else in
+                 the window to say so. -->
+            <Bitmap profile="SDList" position="40px -556px" size="1320px 48px" imageColor="0 0 0 0">
+                <Text profile="SDBarLabel" position="12px 0px" size="1296px 48px" textSize="12px"
+                      textMaxNumLines="2" id="noteText"/>
+            </Bitmap>
+        </GuiElement>
+
+        <BoxLayout profile="fs25_dialogButtonBox" id="buttonsPC">
+            <Button profile="buttonOK" text="$l10n_ar_rul_btnReset" onClick="onReset" id="resetButton" inputAction="MENU_EXTRA_1" />
+            <Bitmap profile="fs25_dialogButtonBoxSeparator" />
+            <Button profile="buttonBack" text="$l10n_ar_rul_btnClose" onClick="onClickBack" id="noButton" />
+        </BoxLayout>
+    </GuiElement>
+</GUI>

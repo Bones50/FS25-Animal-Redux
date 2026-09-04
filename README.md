@@ -6,28 +6,30 @@ that deepens Farming Simulator 25's animal husbandry.
 **Animal Redux requires Distribution Redux.** It declares a hard dependency and
 disables itself with a log message if Distribution Redux is not installed.
 
+## WARNING
+This is a pre-release version and will have bugs that may impact you savegame in unintended ways. I highly reccomend you create a savegame copy and test the mod there first.
+
 ## Status
 
-Early scaffold. This build establishes the link to Distribution Redux and does
-nothing else yet.
+V0.0.0.1 - Pre-Release Test Version
+FEATURES
+1) Advanced animal feeder - Takes into account animals that require ratio's of food and supplies that to the distribution redux mod as demand rather than the default demand. Where possible DR will supply all relevant foods at the require proportions to ensure 100% health. NOTE: Requires Distribution Redux to be installed for this to work.
+2) Barn/Herd Inspector - Allows you to view the status of all animals in one view, as well as the status of each barn in detail. 
+3) Herd Adviser - montior animals/barns, provides advice and embeds it in the Barn/Herd Inspector. Examples would be No room for new births, sell animals to make space, or add root crops to the horse barn to maximise health/value, or animals have passed their prime and are losing value so sell them. 
+4) Animal Buy/Sell - replaces the default game buy/sell screens so you can do it all from directly within the mod.
+5) Animal AutoTrader - Allows a user to place buy orders and sell orders for animals over time (e.g. buy/Sell X Cows, every Y Months for Z Months) per barn.
+6) UI - Added a new tab for animal redux to the Distribution Redux page and embedded additional details in the DR Animal Husbandry UI.
+7) Multilingual Support - Pre built with l10n support.
 
-## Planned scope
+## Known Issues
+1) Advanced Animal feeding is not working with Barns with an autofeeder - currently being worked on
+2) Herd Adviser - Some issues with the advice given due to not enough granularity in the animal data - currently being worked on
+3) Animal Auto-Trader - Same granularity issue above applies to the autotrader, have turned it off in the settings for now while i rebuild. You can reactivate but at best it will not work as intended, and at worst it may mess with your animals in unintended ways.
 
-1. **Extended husbandries** — new feed types and new output types.
-2. **Smarter pooled feed** — demand shaped toward the game's optimal feed mix,
-   with more granular per-feed control.
-3. **Animal trading** — configurable buying and selling of animals.
+## WIP Features
+1) Manure for all Barns
+2) Remove dependency on Distribution Redux
 
-## Building
-
-The mod is packed by `deploy-animal.ps1`, which sits beside `deploy-dr.ps1`
-outside this repository. It validates every Lua file with `luac -p` first, then
-writes `FS25_Animal_Redux.zip` into the FS25 mods folder.
-
-Use `deploy-all.ps1` to deploy Animal Redux and Distribution Redux together —
-they are a dependency pair and should be tested as one.
-
-Close the game before deploying, or the write is silently skipped.
 
 ## Contributing translations
 
@@ -37,3 +39,5 @@ translations are welcome.
 
 An XML comment must not contain a double hyphen — it is a parse error and the
 file will not load.
+
+NOTE: The mod is constantly changing so might be worth waiting a while until things settle down before creating translations.

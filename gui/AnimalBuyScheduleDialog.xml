@@ -1,0 +1,392 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!-- Animal Redux: the AUTO TRADER, three modes in one window.
+
+     BUY ORDERS   a standing order: a count, a cadence, an end
+     SELL ORDERS  the same shape on the way out, plus which animals to take
+     SELL RULES   a per-barn POLICY: continuous, unbounded, jointly optimised
+
+     WHY THREE AND NOT TWO. A timed order and a policy are different instruments
+     and cannot share controls. AnimalSellRules.plan optimises the whole pen at
+     once, so the rules cannot be a list of instructions the way orders are; and
+     an order is a row, so it cannot be a panel of switches. Flat rather than
+     nested puts every screen one click away.
+
+     ONE SET OF ELEMENTS, SWAPPED BY VISIBILITY AND TEXT, never repositioned at
+     runtime. DR 5.37 and 5.33 both record why: moving cells means
+     px-to-normalised arithmetic on a live layout. The two lists and the six
+     selector slots are generic; each mode says what they mean.
+
+     THE SHELL IS COPIED VERBATIM from AnimalTradeDialog, which copied it from
+     DistributionInputsDialog. 18.7 and 18.13 record what happens when a dialog
+     root is invented.
+
+     LAYOUT NOTE, inherited with the shell: SDList is anchorStretchingYLeft +
+     pivotTopLeft, so list elements position from the BOX'S LEFT EDGE with
+     POSITIVE X. Only the centre-anchored title and subtitle sit at x=0. Buttons
+     must use profile "buttonOK" with a capital K.
+
+     RIGHT COLUMN GEOMETRY: six slots at a 62px pitch (label 20 + option 38 + 4),
+     the first at -206, so slot 6 ends at -574 and the money block below it starts
+     at -586 clear of it. BUY uses three slots, SELL ORDERS five, SELL RULES six. -->
+<GUI name="AnimalBuyScheduleDialog" onOpen="onOpen" onClose="onClose">
+    <GuiElement type="empty" profile="newLayer" />
+    <Bitmap profile="dialogFullscreenBg" id="dialogBg" />
+
+    <GuiElement profile="SDInputsDialogBox" id="dialogElement">
+        <ThreePartBitmap profile="fs25_dialogBgMiddleSmall" />
+        <ThreePartBitmap profile="fs25_dialogBgTopSmall" />
+        <ThreePartBitmap profile="fs25_dialogBgBottom" />
+
+        <GuiElement profile="fs25_dialogContentContainer">
+            <Text profile="fs25_dialogTitle" id="dialogTitleElement" text="$l10n_ar_bs_title" position="0px -30px" />
+            <Text profile="fs25_dialogText"  id="dialogTextElement"  text="" position="0px -78px" />
+
+            <!-- WHICH MODE, then WHICH BARN. The barn box hides when the window was
+                 opened from a barn view: a control that cannot do anything is worse
+                 than no control. 40+420=460 | 480+420=900 -->
+            <Bitmap profile="SDList" position="40px -118px" size="420px 40px" imageColor="0 0 0 0">
+            <!-- THE MODE TABS, in the space the mode SELECTOR occupied. Three tabs of 134px: 0+134=134 | 140+134=274 | 280+134=414, inside 420.
+                 THE BASE GAME'S OWN TAB PROFILES: a three part selected background
+                 (gui.tab_selected_left / _middle / _right) under a tab label, exactly
+                 as the settings screen draws them. Unselected draws NOTHING, because
+                 emptyPanel's imageSliceId is "noSlice" and both caps are gui.empty, so
+                 only the active tab has a background.
+                 BACKGROUND BEFORE BUTTON in each pair: children draw in order, so the
+                 label must be declared after it to sit ON it (DR 5.86).
+                 textAutoWidth is switched OFF so the profile's auto fit cannot override
+                 the widths tiled here. See AnimalTabs.lua. -->
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg"
+                             position="0px 0px" size="134px 40px" name="arTabBg1" id="arTabBg1"/>
+            <Button profile="fs25_subCategorySelectorTabbedTab" position="0px 0px" size="134px 40px" textAutoWidth="false"
+                    name="arTabBtn1" id="arTabBtn1" onClick="onTab1"/>
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg"
+                             position="140px 0px" size="134px 40px" name="arTabBg2" id="arTabBg2"/>
+            <Button profile="fs25_subCategorySelectorTabbedTab" position="140px 0px" size="134px 40px" textAutoWidth="false"
+                    name="arTabBtn2" id="arTabBtn2" onClick="onTab2"/>
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg"
+                             position="280px 0px" size="134px 40px" name="arTabBg3" id="arTabBg3"/>
+            <Button profile="fs25_subCategorySelectorTabbedTab" position="280px 0px" size="134px 40px" textAutoWidth="false"
+                    name="arTabBtn3" id="arTabBtn3" onClick="onTab3"/>
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="480px -118px" size="420px 40px"
+                    imageColor="0 0 0 0" id="barnBox">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="barnOption"
+                                 onClick="onBarnChanged"
+                                 textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <!-- THE UPPER LIST: the dealer's catalogue, the barn's groups, or the
+                 plan the rules would carry out. Four text columns and an icon in
+                 every mode, so one table serves and the header says which.
+                 12+24=36 | 48+300=348 | 356+110=466 | 474+140=614 | 622+138=760 -->
+            <Bitmap profile="SDList" position="40px -170px" size="760px 34px">
+                <Text profile="SDHeaderLeft" position="48px 0px"  size="300px 34px" textSize="11px" id="hA1" />
+                <Text profile="SDHeaderLeft" position="356px 0px" size="110px 34px" textSize="11px" id="hA2" />
+                <Text profile="SDHeaderLeft" position="474px 0px" size="140px 34px" textSize="11px" id="hA3" />
+                <Text profile="SDHeaderLeft" position="622px 0px" size="138px 34px" textSize="11px" id="hA4" />
+                <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
+            </Bitmap>
+            <GuiElement profile="SDList" position="40px -208px" size="760px 294px">
+                <!-- onClick BELONGS TO THE SMOOTHLIST, NOT THE ROW. DR 6.29: a
+                     ListItem handler runs during child propagation, BEFORE the list
+                     applies its selection, so it reads the previous row. -->
+                <SmoothList profile="SDList" id="catList" position="0px 0px" size="760px 294px"
+                            onDoubleClick="onCatClicked" onClick="onCatClicked"
+                            onSelectionChanged="onCatChanged" selectedWithoutFocus="false">
+                    <ListItem profile="SDListItemStats" name="catRow" size="760px 42px">
+                        <Bitmap position="12px 9px" size="24px 24px" name="catIcon" imageColor="1 1 1 1" />
+                        <Text profile="SDRowCell" position="48px 0px"  size="300px 42px" textSize="12px" name="catName" />
+                        <Text profile="SDRowCell" position="356px 0px" size="110px 42px" textSize="12px" name="catAge" />
+                        <Text profile="SDRowCell" position="474px 0px" size="140px 42px" textSize="12px" name="catEach" />
+                        <Text profile="SDRowCell" position="622px 0px" size="138px 42px" textSize="12px" name="catRowNo" />
+                        <!-- RULES MODE ONLY: one wide cell over the last two, so an
+                             order's full rule set fits where three narrow columns
+                             could not. Declared rather than repositioned, and the
+                             cells it covers are hidden when it shows (DR 5.37). -->
+                        <Text profile="SDRowCell" position="356px 0px" size="404px 42px" textSize="12px"
+                              name="catWide" visible="false" />
+                    </ListItem>
+                </SmoothList>
+                <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px" size="12px 294px" with="anchorTopRight">
+                    <Slider profile="fs25_listSlider" size="6px 286px" dataElementId="catList" id="catSlider" />
+                </ThreePartBitmap>
+            </GuiElement>
+
+            <!-- THE LOWER LIST: what is already standing on this barn. Hidden in
+                 SELL RULES, which has no orders: a policy is one thing, not a list.
+                 12+250=262 | 270+90=360 | 368+80=448 | 456+304=760. RULES takes the
+                 room, because it is the only cell carrying several facts -->
+            <Bitmap profile="SDList" position="40px -516px" size="760px 34px" id="hdrB">
+                <Text profile="SDHeaderLeft" position="12px 0px"  size="250px 34px" textSize="11px" id="hB1" />
+                <Text profile="SDHeaderLeft" position="270px 0px" size="90px 34px" textSize="11px" id="hB2" />
+                <Text profile="SDHeaderLeft" position="368px 0px" size="80px 34px" textSize="11px" id="hB3" />
+                <Text profile="SDHeaderLeft" position="456px 0px" size="304px 34px" textSize="11px" id="hB4" />
+                <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
+            </Bitmap>
+            <GuiElement profile="SDList" position="40px -554px" size="760px 146px" id="listB">
+                <SmoothList profile="SDList" id="schedList" position="0px 0px" size="760px 146px"
+                            onClick="onSchedClicked" onSelectionChanged="onSchedChanged"
+                            selectedWithoutFocus="false">
+                    <ListItem profile="SDListItemStats" name="schedRow" size="760px 42px">
+                        <Text profile="SDRowCell" position="12px 0px"  size="250px 42px" textSize="12px" name="sWhat" />
+                        <Text profile="SDRowCell" position="270px 0px" size="90px 42px" textSize="12px" name="sEvery" />
+                        <Text profile="SDRowCell" position="368px 0px" size="80px 42px" textSize="12px" name="sProgress" />
+                        <Text profile="SDRowCell" position="456px 0px" size="304px 42px" textSize="12px" name="sNext" />
+                    </ListItem>
+                </SmoothList>
+                <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px" size="12px 146px" with="anchorTopRight">
+                    <Slider profile="fs25_listSlider" size="6px 138px" dataElementId="schedList" id="schedSlider" />
+                </ThreePartBitmap>
+            </GuiElement>
+
+            <!-- SIX GENERIC SLOTS. Each mode fills the ones it needs and hides the
+                 rest, so nothing is ever repositioned. -->
+            <Bitmap profile="SDList" position="820px -170px" size="340px 34px">
+                <Text profile="SDHeaderLeft" position="12px 0px" size="328px 34px" textSize="11px" id="hOrder" />
+                <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="820px -206px" size="340px 20px" imageColor="0 0 0 0" id="lblBox1">
+                <Text profile="SDBarLabel" position="12px 0px" size="328px 20px" textSize="12px" id="lbl1" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -226px" size="340px 38px"
+                    imageColor="0 0 0 0" id="optBox1">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt1" wrap="true"
+                                 onClick="onOpt1" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <!-- THE TEXT PICKER, slot 1 only for now. A number you TYPE, with the
+                 same two arrows still doing the small nudges. See TextPicker.lua.
+
+                 A SECOND BOX AT THE SAME POSITION, shown instead of optBox1 rather
+                 than replacing anything in it. That is this file's own standing
+                 rule: one set of elements swapped by visibility, never repositioned
+                 at runtime, because moving a cell means px to normalised arithmetic
+                 on a live layout (DR 5.37 / 5.33).
+
+                 IT IS ASSEMBLED FROM THE SELECTOR'S OWN PIECES, so it looks like the
+                 control it stands in for rather than merely near it. The background
+                 is the multiTextOption background; the arrows are the stock
+                 multiTextOption arrows, UNCHANGED. DR 5.64 lost two builds to
+                 garbled arrow art after overriding those profiles, and the lesson it
+                 drew was to override their anchoring and never their geometry. Here
+                 not even that is needed: they carry anchorStretchingYLeft and
+                 anchorStretchingYRight, so dropped into a 340 wide box they place
+                 themselves at its two ends exactly as they do inside a real
+                 selector. Left unchanged they also stay covered by DR's ultrawide
+                 keep aspect list, which names them by profile.
+
+                 DECLARATION ORDER IS DELIBERATE, and it is two different orders at
+                 once. Children DRAW in order, so background, then field, then
+                 prompt over it. Children receive the MOUSE in REVERSE order
+                 (GuiElement:mouseEvent counts down), so the arrows are declared LAST
+                 and get first refusal on a click. The field consumes clicks where a
+                 label does not, so an arrow it overlapped would be a dead arrow.
+                 The 80px inset in ARNumberInput keeps them apart in the first place;
+                 this is the belt to that brace.
+
+                 enterWhenClickOutside commits on a click elsewhere, and
+                 TextInputElement only raises that while the field is actually
+                 capturing, so an ordinary click is never read as an edit. -->
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -226px" size="340px 38px"
+                    imageColor="0 0 0 0" id="numBox1" visible="false">
+                <ThreePartBitmap profile="fs25_multiTextOptionBg" />
+                <TextInput profile="ARNumberInput" id="numInput1"
+                           onEnterPressed="onNum1Enter" onEscPressed="onNum1Esc"
+                           onTextChanged="onNum1Changed" onIsUnicodeAllowed="onNum1Digit"
+                           enterWhenClickOutside="true" />
+                <Text profile="ARNumberHint" id="numHint1" />
+                <Button profile="fs25_multiTextOptionLeft"  id="numLeft1"  onClick="onNum1Left" />
+                <Button profile="fs25_multiTextOptionRight" id="numRight1" onClick="onNum1Right" />
+            </Bitmap>
+
+            <!-- THE ON / OFF SWITCH for slot 1. Declared for every slot even though
+                 only slot 4 uses one today: a slot that silently did nothing when
+                 given kind = "toggle" is the sort of gap found a year later. -->
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -226px" size="340px 38px"
+                    imageColor="0 0 0 0" id="togBox1" visible="false">
+                <BinaryOption profile="ARToggle" id="tog1" onClick="onTog1" />
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="820px -268px" size="340px 20px" imageColor="0 0 0 0" id="lblBox2">
+                <Text profile="SDBarLabel" position="12px 0px" size="328px 20px" textSize="12px" id="lbl2" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -288px" size="340px 38px"
+                    imageColor="0 0 0 0" id="optBox2">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt2" wrap="true"
+                                 onClick="onOpt2" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -288px" size="340px 38px"
+                    imageColor="0 0 0 0" id="numBox2" visible="false">
+                <ThreePartBitmap profile="fs25_multiTextOptionBg" />
+                <TextInput profile="ARNumberInput" id="numInput2"
+                           onEnterPressed="onNum2Enter" onEscPressed="onNum2Esc"
+                           onTextChanged="onNum2Changed" onIsUnicodeAllowed="onNum2Digit"
+                           enterWhenClickOutside="true" />
+                <Text profile="ARNumberHint" id="numHint2" />
+                <Button profile="fs25_multiTextOptionLeft"  id="numLeft2"  onClick="onNum2Left" />
+                <Button profile="fs25_multiTextOptionRight" id="numRight2" onClick="onNum2Right" />
+            </Bitmap>
+
+            <!-- THE ON / OFF SWITCH for slot 2. Declared for every slot even though
+                 only slot 4 uses one today: a slot that silently did nothing when
+                 given kind = "toggle" is the sort of gap found a year later. -->
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -288px" size="340px 38px"
+                    imageColor="0 0 0 0" id="togBox2" visible="false">
+                <BinaryOption profile="ARToggle" id="tog2" onClick="onTog2" />
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="820px -330px" size="340px 20px" imageColor="0 0 0 0" id="lblBox3">
+                <Text profile="SDBarLabel" position="12px 0px" size="328px 20px" textSize="12px" id="lbl3" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -350px" size="340px 38px"
+                    imageColor="0 0 0 0" id="optBox3">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt3" wrap="true"
+                                 onClick="onOpt3" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -350px" size="340px 38px"
+                    imageColor="0 0 0 0" id="numBox3" visible="false">
+                <ThreePartBitmap profile="fs25_multiTextOptionBg" />
+                <TextInput profile="ARNumberInput" id="numInput3"
+                           onEnterPressed="onNum3Enter" onEscPressed="onNum3Esc"
+                           onTextChanged="onNum3Changed" onIsUnicodeAllowed="onNum3Digit"
+                           enterWhenClickOutside="true" />
+                <Text profile="ARNumberHint" id="numHint3" />
+                <Button profile="fs25_multiTextOptionLeft"  id="numLeft3"  onClick="onNum3Left" />
+                <Button profile="fs25_multiTextOptionRight" id="numRight3" onClick="onNum3Right" />
+            </Bitmap>
+
+            <!-- THE ON / OFF SWITCH for slot 3. Declared for every slot even though
+                 only slot 4 uses one today: a slot that silently did nothing when
+                 given kind = "toggle" is the sort of gap found a year later. -->
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -350px" size="340px 38px"
+                    imageColor="0 0 0 0" id="togBox3" visible="false">
+                <BinaryOption profile="ARToggle" id="tog3" onClick="onTog3" />
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="820px -392px" size="340px 20px" imageColor="0 0 0 0" id="lblBox4">
+                <Text profile="SDBarLabel" position="12px 0px" size="328px 20px" textSize="12px" id="lbl4" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -412px" size="340px 38px"
+                    imageColor="0 0 0 0" id="optBox4">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt4" wrap="true"
+                                 onClick="onOpt4" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -412px" size="340px 38px"
+                    imageColor="0 0 0 0" id="numBox4" visible="false">
+                <ThreePartBitmap profile="fs25_multiTextOptionBg" />
+                <TextInput profile="ARNumberInput" id="numInput4"
+                           onEnterPressed="onNum4Enter" onEscPressed="onNum4Esc"
+                           onTextChanged="onNum4Changed" onIsUnicodeAllowed="onNum4Digit"
+                           enterWhenClickOutside="true" />
+                <Text profile="ARNumberHint" id="numHint4" />
+                <Button profile="fs25_multiTextOptionLeft"  id="numLeft4"  onClick="onNum4Left" />
+                <Button profile="fs25_multiTextOptionRight" id="numRight4" onClick="onNum4Right" />
+            </Bitmap>
+
+            <!-- THE ON / OFF SWITCH for slot 4. Declared for every slot even though
+                 only slot 4 uses one today: a slot that silently did nothing when
+                 given kind = "toggle" is the sort of gap found a year later. -->
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -412px" size="340px 38px"
+                    imageColor="0 0 0 0" id="togBox4" visible="false">
+                <BinaryOption profile="ARToggle" id="tog4" onClick="onTog4" />
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="820px -454px" size="340px 20px" imageColor="0 0 0 0" id="lblBox5">
+                <Text profile="SDBarLabel" position="12px 0px" size="328px 20px" textSize="12px" id="lbl5" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -474px" size="340px 38px"
+                    imageColor="0 0 0 0" id="optBox5">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt5" wrap="true"
+                                 onClick="onOpt5" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -474px" size="340px 38px"
+                    imageColor="0 0 0 0" id="numBox5" visible="false">
+                <ThreePartBitmap profile="fs25_multiTextOptionBg" />
+                <TextInput profile="ARNumberInput" id="numInput5"
+                           onEnterPressed="onNum5Enter" onEscPressed="onNum5Esc"
+                           onTextChanged="onNum5Changed" onIsUnicodeAllowed="onNum5Digit"
+                           enterWhenClickOutside="true" />
+                <Text profile="ARNumberHint" id="numHint5" />
+                <Button profile="fs25_multiTextOptionLeft"  id="numLeft5"  onClick="onNum5Left" />
+                <Button profile="fs25_multiTextOptionRight" id="numRight5" onClick="onNum5Right" />
+            </Bitmap>
+
+            <!-- THE ON / OFF SWITCH for slot 5. Declared for every slot even though
+                 only slot 4 uses one today: a slot that silently did nothing when
+                 given kind = "toggle" is the sort of gap found a year later. -->
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -474px" size="340px 38px"
+                    imageColor="0 0 0 0" id="togBox5" visible="false">
+                <BinaryOption profile="ARToggle" id="tog5" onClick="onTog5" />
+            </Bitmap>
+
+            <Bitmap profile="SDList" position="820px -516px" size="340px 20px" imageColor="0 0 0 0" id="lblBox6">
+                <Text profile="SDBarLabel" position="12px 0px" size="328px 20px" textSize="12px" id="lbl6" />
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -536px" size="340px 38px"
+                    imageColor="0 0 0 0" id="optBox6">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" id="opt6" wrap="true"
+                                 onClick="onOpt6" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            </Bitmap>
+
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -536px" size="340px 38px"
+                    imageColor="0 0 0 0" id="numBox6" visible="false">
+                <ThreePartBitmap profile="fs25_multiTextOptionBg" />
+                <TextInput profile="ARNumberInput" id="numInput6"
+                           onEnterPressed="onNum6Enter" onEscPressed="onNum6Esc"
+                           onTextChanged="onNum6Changed" onIsUnicodeAllowed="onNum6Digit"
+                           enterWhenClickOutside="true" />
+                <Text profile="ARNumberHint" id="numHint6" />
+                <Button profile="fs25_multiTextOptionLeft"  id="numLeft6"  onClick="onNum6Left" />
+                <Button profile="fs25_multiTextOptionRight" id="numRight6" onClick="onNum6Right" />
+            </Bitmap>
+
+            <!-- THE ON / OFF SWITCH for slot 6. Declared for every slot even though
+                 only slot 4 uses one today: a slot that silently did nothing when
+                 given kind = "toggle" is the sort of gap found a year later. -->
+            <Bitmap profile="fs25_multiTextOptionContainer" position="820px -536px" size="340px 38px"
+                    imageColor="0 0 0 0" id="togBox6" visible="false">
+                <BinaryOption profile="ARToggle" id="tog6" onClick="onTog6" />
+            </Bitmap>
+
+            <!-- WHAT IT COMES TO. Itemised in every mode, for the reason 20.3
+                 itemises a sale: the figure agreed to must be the figure that
+                 moves. Clear of slot 6, which ends at -574. -->
+            <Bitmap profile="SDList" position="820px -586px" size="340px 30px" imageColor="0 0 0 0">
+                <Text profile="SDBarLabel"      position="12px 0px"  size="190px 30px" textSize="13px" id="lblRuns"/>
+                <Text profile="SDBarLabelRight" position="210px 0px" size="118px 30px" textSize="13px" id="valRuns"/>
+            </Bitmap>
+            <Bitmap profile="SDList" position="820px -618px" size="340px 30px" imageColor="0 0 0 0">
+                <Text profile="SDBarLabel"      position="12px 0px"  size="190px 30px" textSize="13px" id="lblEach"/>
+                <Text profile="SDBarLabelRight" position="210px 0px" size="118px 30px" textSize="13px" id="valEach"/>
+            </Bitmap>
+            <Bitmap profile="SDList" position="820px -652px" size="340px 40px" imageColor="0 0 0 0">
+                <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
+                <Text profile="SDBarLabel"      position="12px 0px"  size="190px 40px" textSize="15px" id="lblTotal"/>
+                <Text profile="SDBarLabelRight" position="210px 0px" size="118px 40px" textSize="20px" id="valTotal"/>
+            </Bitmap>
+
+            <!-- ANYTHING THAT WOULD OTHERWISE BE SILENT: a client, a stand down, a
+                 refusal, or why nothing sold. Full width and on the LEFT, because in
+                 SELL RULES the sentence is long and the right column is full. -->
+            <Bitmap profile="SDList" position="40px -706px" size="1120px 48px" imageColor="0 0 0 0">
+                <Text profile="SDBarLabel" position="12px 0px" size="1096px 48px" textSize="12px"
+                      textMaxNumLines="2" id="noteText"/>
+            </Bitmap>
+        </GuiElement>
+
+        <BoxLayout profile="fs25_dialogButtonBox" id="buttonsPC">
+            <Button profile="buttonOK" text="$l10n_ar_bs_btnAdd"     onClick="onAdd"     id="addButton"     inputAction="MENU_ACCEPT" />
+            <Bitmap profile="fs25_dialogButtonBoxSeparator" />
+            <Button profile="buttonOK" text="$l10n_ar_bs_btnPause"   onClick="onPause"   id="pauseButton"   inputAction="MENU_EXTRA_1" />
+            <Bitmap profile="fs25_dialogButtonBoxSeparator" />
+            <Button profile="buttonOK" text="$l10n_ar_bs_btnRemove"  onClick="onRemove"  id="removeButton"  inputAction="MENU_EXTRA_2" />
+            <Bitmap profile="fs25_dialogButtonBoxSeparator" />
+            <Button profile="buttonBack" text="$l10n_ar_bs_btnClose" onClick="onClickBack" id="noButton" />
+        </BoxLayout>
+    </GuiElement>
+</GUI>

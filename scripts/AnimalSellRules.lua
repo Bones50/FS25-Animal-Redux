@@ -400,6 +400,205 @@ function AnimalSellRules.slotUse(a, feeEach)
     return AnimalEconomics.slotVerdict(adultSum / headcount, nurserySum / headcount, 1)
 end
 
+---THE VERDICT PER BREED, which `slotUse` computes and then averages away.
+--
+-- `slotUse` already asks `slotVerdict` about EVERY CLUSTER and then collapses the
+-- lot into one headcount weighted answer for the barn. 15.6 justified that
+-- weighting -- *"a 1-animal cluster and a 250-animal one are not two equal
+-- opinions"* -- and it is right for a barn with one purpose. On a MIXED BARN it
+-- produces a figure describing neither half: 20 dairy cows and 20 beef cows
+-- average into a verdict that is true of nobody.
+--
+-- So the per-breed answer was being computed inside that loop and discarded. This
+-- keeps it. Nothing here is a new model -- same `slotVerdict`, same weighting,
+-- grouped one level finer.
+--
+-- WHY BREED IS A USABLE PROXY FOR PURPOSE, which is the whole point (28.7): a
+-- subtype carries its OWN `output` table, and `assessCluster` prices it against
+-- the BARN's `producibleOutputKeys`. So a beef breed that declares no milk scores
+-- zero adult margin while a dairy breed beside it in the same building scores its
+-- milk -- and a dairy breed in a barn with no milking spec scores zero too. Both
+-- directions already work; they were simply averaged together before they could
+-- be read.
+--
+-- WEIGHTED BY THE JUDGED HEAD, not the whole group, mirroring `slotUse`: a cluster
+-- that could not be priced must not dilute the answer for the ones that could.
+---Returns an array, biggest group first, each { subTypeIndex, name, count, total,
+-- age, use, adult, nursery, margin } -- `use` nil where no verdict was possible.
+function AnimalSellRules.slotUseByType(a, feeEach)
+    local order = {}
+    if a == nil or AnimalEconomics == nil or AnimalEconomics.slotVerdict == nil then return order end
+    local byType = {}
+    for _, c in ipairs(a.clusters or {}) do
+        local n = c.count or 0
+        if n > 0 then
+            local g = byType[c.subTypeIndex]
+            if g == nil then
+                g = { subTypeIndex = c.subTypeIndex, name = c.name, count = 0, total = 0,
+                      adultSum = 0, nurserySum = 0, judged = 0,
+                      -- WHERE THE EARNINGS COME FROM, per product. `assessCluster`
+                      -- has carried `econ.byFillType` from the first day and
+                      -- nothing has ever read it -- the same shape as the per-breed
+                      -- verdict this function exists to rescue.
+                      --
+                      -- IT IS THE TERMS, NOT THE CONCLUSION, that a player needs to
+                      -- override a figure (28.8): "earns 940/mo" is unarguable,
+                      -- while "milk 900, manure 40" says at once WHICH number is
+                      -- wrong for a farm that digests its manure instead of selling
+                      -- it. The model prices raw fill types and cannot see what
+                      -- happens downstream, so this is where its blind spot becomes
+                      -- visible rather than merely present.
+                      earns = {}, earnHead = 0, earnsPerAnimal = nil,
+                      -- WHAT A NEWBORN OF THIS BREED IS WORTH. A property of the
+                      -- subtype's price curve, so identical across its clusters --
+                      -- the first one that has it speaks for the breed.
+                      birthValue = nil }
+                byType[c.subTypeIndex] = g
+                order[#order + 1] = g
+            end
+            g.count = g.count + n
+            if g.birthValue == nil and type(c.birthValue) == "number" then
+                g.birthValue = c.birthValue
+            end
+            g.total = g.total + (c.total or ((c.each or 0) * n))
+            -- the YOUNGEST cluster's age, only so the row can pick a picture: the
+            -- base game's own icon lookup is by (subtype, age).
+            if g.age == nil or (c.age or 0) < g.age then g.age = c.age end
+
+            -- PER ANIMAL PER MONTH, which is the basis `earnsPerMonth` and the
+            -- verdict already use -- so the parts add up to the figure beside them
+            -- instead of being a second quantity in different units.
+            -- AN ENTRY IS A RECORD, NOT A NUMBER: `outputValuePerMonth` writes
+            -- `{ litres, value, key }` per fill type, and `value` is nil where the
+            -- product could not be priced. The first version tested
+            -- `type(v) == "number"` and so matched NOTHING, leaving an empty
+            -- breakdown behind a headcount that had already been incremented --
+            -- which read on screen as every breed earning 0 from nowhere.
+            if c.econ ~= nil and type(c.econ.byFillType) == "table" then
+                for ft, e in pairs(c.econ.byFillType) do
+                    if type(e) == "table" then
+                        if type(e.value) == "number" then
+                            g.earns[ft] = (g.earns[ft] or 0) + e.value * n
+                        else
+                            -- MADE BUT NOT PRICEABLE. Counted rather than dropped:
+                            -- "earns nothing" and "nobody could put a price on it"
+                            -- are different answers and the screen must not give
+                            -- the first when it means the second.
+                            g.unpriced = (g.unpriced or 0) + 1
+                        end
+                    end
+                end
+                g.earnHead = g.earnHead + n
+            end
+
+            local v = AnimalEconomics.slotVerdict(
+                (c.econ ~= nil) and c.econ.marginPerMonth or nil,
+                type(c.birthValue) == "number" and (c.birthValue - (feeEach or 0)) or nil,
+                c.cycleMonths)
+            if v ~= nil then
+                g.adultSum   = g.adultSum + v.adult * n
+                g.nurserySum = g.nurserySum + v.nursery * n
+                g.judged     = g.judged + n
+            end
+        end
+    end
+    for _, g in ipairs(order) do
+        -- back to a per-animal figure, over the head that actually contributed one
+        if g.earnHead > 0 then
+            local sum = 0
+            for ft, v in pairs(g.earns) do
+                g.earns[ft] = v / g.earnHead
+                sum = sum + g.earns[ft]
+            end
+            g.earnsPerAnimal = sum
+        else
+            g.earns = nil
+        end
+        if g.judged > 0 then
+            -- cycleMonths 1 so the already-per-month nursery figure passes straight
+            -- through, exactly as slotUse does for the barn.
+            local v = AnimalEconomics.slotVerdict(g.adultSum / g.judged, g.nurserySum / g.judged, 1)
+            if v ~= nil then
+                g.use, g.adult, g.nursery, g.margin = v.use, v.adult, v.nursery, v.margin
+            end
+        end
+    end
+    -- WHY EACH BREED GOT THE VERDICT IT DID. A CODE, never a sentence: this module
+    -- is pure and does not know what language the player reads, and the harness
+    -- asserts on codes rather than on wording -- the rule `notes` and `slotUseGap`
+    -- already follow.
+    for _, g in ipairs(order) do
+        g.reason = AnimalSellRules.slotReason(g)
+    end
+    -- BIGGEST GROUP FIRST, then by name so the order is stable across passes --
+    -- table.sort is not stable, and a list that reshuffles under the player is the
+    -- 24.3 complaint about clusters all over again.
+    table.sort(order, function(x, y)
+        if x.count ~= y.count then return x.count > y.count end
+        return tostring(x.name) < tostring(y.name)
+    end)
+    return order
+end
+
+---WHY A BREED GOT ITS VERDICT, in one code.
+--
+-- The verdict alone says WHICH, never WHY, and "Producers" with no reason beside
+-- it is exactly the sort of conclusion 28.8 argued a player cannot push back on.
+-- These are the four shapes the comparison actually takes.
+--
+-- `noOutput` IS THE ONE WORTH SEPARATING. A breed that makes nothing sellable is
+-- pointed at breeding because it has no earnings to beat, which is a different
+-- statement from one whose calves genuinely outvalue its output -- and it is the
+-- pig and horse case (28.4).
+function AnimalSellRules.slotReason(g)
+    if g == nil or g.use == nil then return nil end
+    local adult, nursery = g.adult or 0, g.nursery or 0
+    if g.use == "NURSERY" then
+        if adult <= 0 then return "noOutput" end
+        return "calvesWorthMore"
+    end
+    -- ADULT with nothing on either side is not a judgement, it is an absence: the
+    -- comparison was 0 against 0 and the tie fell to adults by default.
+    if adult <= 0 and nursery <= 0 then return "nothingToWeigh" end
+    return "outputBeatsCalves"
+end
+
+---WHY THERE IS NO PRODUCER VERSUS NURSERY VERDICT, when there is none.
+--
+-- `slotUse` returns nil for four different reasons and names none of them, so a
+-- barn with no verdict is indistinguishable from one nobody asked about. That is
+-- not a hypothetical gap: `slotVerdict` refuses a nil `adultPerMonth`, and a barn
+-- whose animals have no PRICED monthly output -- a pig or horse pen, which makes
+-- only manure -- is exactly the case that reaches it. Those are also the barns a
+-- player would call "always breeders", so the one place the model is most likely
+-- to fall silent is the one where its answer would be least surprising.
+--
+-- IT MIRRORS `slotUse`'s OWN LOOP, and must keep mirroring it: that function
+-- decides it has an answer as soon as ONE cluster can be judged, so this one has
+-- to give up as soon as one can. If they disagree, a barn reports both a verdict
+-- and a reason for having none.
+--
+-- Returns nil when a verdict IS possible, else { code, name }. A CODE, never a
+-- sentence -- this module is pure and does not know what language the player
+-- reads, and the harness asserts on codes rather than on wording.
+function AnimalSellRules.slotUseGap(a)
+    if a == nil then return { code = "empty" } end
+    local first = nil
+    for _, c in ipairs(a.clusters or {}) do
+        if (c.count or 0) > 0 then
+            local margin = (c.econ ~= nil) and c.econ.marginPerMonth or nil
+            local code = nil
+            if type(margin) ~= "number" then code = "margin"
+            elseif type(c.birthValue) ~= "number" then code = "birthValue"
+            elseif type(c.cycleMonths) ~= "number" or c.cycleMonths <= 0 then code = "cycle" end
+            if code == nil then return nil end        -- this one can be judged
+            if first == nil then first = { code = code, name = c.name } end
+        end
+    end
+    if first == nil then return { code = "empty" } end
+    return first
+end
+
 function AnimalSellRules.plan(p, cfg, priceFn)
     cfg = cfg or {}
     -- Returns the money AND whether it is REALISED -- the game's own net, via

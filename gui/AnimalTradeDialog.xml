@@ -39,11 +39,25 @@
                  The barn box is HIDDEN when the dialog was opened from a barn view,
                  because there is then nothing to choose.
                  40 + 300 = 340 | 360 + 500 = 860 -->
-            <Bitmap profile="fs25_multiTextOptionContainer" position="40px -118px" size="300px 40px"
-                    imageColor="0 0 0 0">
-                <MultiTextOption profile="fs25_settingsMultiTextOption" id="modeOption"
-                                 onClick="onModeChanged"
-                                 textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
+            <Bitmap profile="SDList" position="40px -118px" size="300px 40px" imageColor="0 0 0 0">
+            <!-- THE MODE TABS, in the space the mode SELECTOR occupied. Two tabs of 146px: 0+146=146 | 152+146=298, inside 300.
+                 THE BASE GAME'S OWN TAB PROFILES: a three part selected background
+                 (gui.tab_selected_left / _middle / _right) under a tab label, exactly
+                 as the settings screen draws them. Unselected draws NOTHING, because
+                 emptyPanel's imageSliceId is "noSlice" and both caps are gui.empty, so
+                 only the active tab has a background.
+                 BACKGROUND BEFORE BUTTON in each pair: children draw in order, so the
+                 label must be declared after it to sit ON it (DR 5.86).
+                 textAutoWidth is switched OFF so the profile's auto fit cannot override
+                 the widths tiled here. See AnimalTabs.lua. -->
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg"
+                             position="0px 0px" size="146px 40px" name="arTabBg1" id="arTabBg1"/>
+            <Button profile="fs25_subCategorySelectorTabbedTab" position="0px 0px" size="146px 40px" textAutoWidth="false"
+                    name="arTabBtn1" id="arTabBtn1" onClick="onTab1"/>
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg"
+                             position="152px 0px" size="146px 40px" name="arTabBg2" id="arTabBg2"/>
+            <Button profile="fs25_subCategorySelectorTabbedTab" position="152px 0px" size="146px 40px" textAutoWidth="false"
+                    name="arTabBtn2" id="arTabBtn2" onClick="onTab2"/>
             </Bitmap>
             <Bitmap profile="fs25_multiTextOptionContainer" position="360px -118px" size="500px 40px"
                     imageColor="0 0 0 0" id="barnBox">

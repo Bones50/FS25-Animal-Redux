@@ -177,6 +177,14 @@ end
 -- product DR is willing to deliver. DR's own behaviour is correct for SERIAL
 -- animals anyway, so a decline is never a regression.
 function AnimalRedux.feedPlanner(placeable, allowedFillTypes, poolNeed)
+    -- THE "Advanced Animal Feeder" SWITCH, and it DECLINES rather than
+    -- unregistering. DR's own contract says a planner returning nil leaves DR's
+    -- behaviour in place, and feedPlanFor treats that identically to an empty
+    -- registry -- so this is the documented off switch rather than a second
+    -- mechanism, it costs one comparison per husbandry per hour, and it takes
+    -- effect on the very next pass with no registry churn and no re-registration
+    -- ordering to get wrong.
+    if AnimalSettings ~= nil and not AnimalSettings.advancedFeederEnabled() then return nil end
     if AnimalFeedModel == nil or placeable == nil then return nil end
     local spec = placeable.spec_husbandryFood
     if spec == nil then return nil end
@@ -520,16 +528,31 @@ function AnimalRedux.husbandryPanel(placeable)
 
             out.feed = {
                 factor = factor, serial = serial, activeTitle = active,
-                -- WHAT TO FEED NEXT, from the same groups the bar above it draws,
-                -- so the sentence and the bar cannot disagree about which tier is short
-                advice = AnimalRedux.feedAdvice(groups, serial, factor,
-                                                placeable.spec_husbandryMeadow ~= nil),
                 -- a meadow feeds outside the trough, so every group can read 0 L while
                 -- the factor is well above zero; DR says so on the panel rather than
                 -- leaving the contradiction on screen
                 grazes = placeable.spec_husbandryMeadow ~= nil,
                 groups = groups,
             }
+            -- WHAT TO FEED NEXT, from the same groups the bar above it draws, so the
+            -- sentence and the bar cannot disagree about which tier is short.
+            --
+            -- OMITTED, NOT BLANKED, when the Herd Adviser is off. DR's panel renderer
+            -- already blanks the line for a nil advice table, so simply not filling it
+            -- IS the suppression and DR needs no change at all. It also means the
+            -- advice is never COMPUTED, which is the other half of the point --
+            -- feedAdvice walks every group to decide what to say.
+            --
+            -- ASSIGNED AFTER THE CONSTRUCTOR rather than as a conditional field.
+            -- `cond and f() or nil` would be correct here by luck, because f returns
+            -- a table or nil and nil is the wanted fallback either way -- but this
+            -- codebase has been bitten twice by that collapse (DR 5.44 / 5.46c) and
+            -- an if is not worth arguing about. It also reads the same way as the
+            -- herd advice below, which is the other half of this switch.
+            if AnimalSettings == nil or AnimalSettings.herdAdviserEnabled() then
+                out.feed.advice = AnimalRedux.feedAdvice(groups, serial, factor,
+                                                         placeable.spec_husbandryMeadow ~= nil)
+            end
         end
     end
 
@@ -557,7 +580,9 @@ function AnimalRedux.husbandryPanel(placeable)
         local okA, pl = pcall(AnimalSellRules.plan, placeable)
         local a = (okA and type(pl) == "table") and pl.assess or nil
         if type(a) == "table" and type(a.clusters) == "table" then
-            if out.herd ~= nil then out.herd.advice = AnimalRedux.birthAdvice(a, pl) end
+            if out.herd ~= nil and (AnimalSettings == nil or AnimalSettings.herdAdviserEnabled()) then
+                out.herd.advice = AnimalRedux.birthAdvice(a, pl)
+            end
             local okS, sum = pcall(AnimalEconomics.summarise, a.clusters)
             if okS and type(sum) == "table" then
                 -- NIL, NOT ZERO, when the ration cannot be priced: a barn whose
@@ -625,7 +650,7 @@ function AnimalRedux.onMissionLoaded()
     -- carries anything. Costs one table lookup at load.
     local probe = AnimalRedux.l10n("ar_l10n_selftest", "FALLBACK")
     if probe == "ok" then
-        AnimalRedux.warn("l10n OK (translations/translation_en.xml resolved against '%s')",
+        AnimalRedux.log("l10n OK (translations/translation_en.xml resolved against '%s')",
             AnimalRedux.MOD_NAME)
     else
         AnimalRedux.warn("l10n NOT RESOLVING (got '%s'): every string will show its English "
@@ -642,7 +667,7 @@ function AnimalRedux.onMissionLoaded()
     if AnimalFoodProbe ~= nil and AnimalFoodProbe.register ~= nil then
         local okP, registered = pcall(AnimalFoodProbe.register)
         if okP and registered then
-            AnimalRedux.warn("dev probes available: arFoodProbe, arFeedPartial, arTradeProbe, arReproProbe, arSellProbe")
+            AnimalRedux.log("dev probes available: arFoodProbe, arFeedPartial, arTradeProbe, arReproProbe, arSellProbe")
         end
     end
 
@@ -651,7 +676,7 @@ function AnimalRedux.onMissionLoaded()
     -- should be removable the moment that question is closed.
     if AnimalTrade ~= nil and AnimalTrade.installConsole ~= nil then
         local okT, reg = pcall(AnimalTrade.installConsole)
-        if okT and reg then AnimalRedux.warn("dev probe available: arTradeDump") end
+        if okT and reg then AnimalRedux.log("dev probe available: arTradeDump") end
     end
 
     -- The feed model's own verifier. Registered separately from the probe so
@@ -659,7 +684,7 @@ function AnimalRedux.onMissionLoaded()
     if AnimalFeedModel ~= nil and AnimalFeedModel.Console ~= nil then
         local okF, registered = pcall(AnimalFeedModel.Console.register)
         if okF and registered then
-            AnimalRedux.warn("dev probe available: arFeedPlan [name fragment]")
+            AnimalRedux.log("dev probe available: arFeedPlan [name fragment]")
         end
     end
 
@@ -670,7 +695,7 @@ function AnimalRedux.onMissionLoaded()
         local okR = pcall(SD.API.registerFeedPlanner, AnimalRedux.MOD_NAME, AnimalRedux.feedPlanner)
         AnimalRedux.feedPlanningActive = okR and true or false
         if okR then
-            AnimalRedux.warn("feed planning ACTIVE (Distribution Redux API v%d)", apiVersion)
+            AnimalRedux.log("feed planning ACTIVE (Distribution Redux API v%d)", apiVersion)
         else
             AnimalRedux.warn("feed planner could not be registered; DR keeps its own feed logic")
         end
@@ -691,7 +716,7 @@ function AnimalRedux.onMissionLoaded()
                           AnimalRedux.husbandryPanel)
         AnimalRedux.panelActive = okP and true or false
         if okP then
-            AnimalRedux.warn("husbandry panel ACTIVE, embedded in the Animal Husbandry tab")
+            AnimalRedux.log("husbandry panel ACTIVE, embedded in the Animal Husbandry tab")
         else
             AnimalRedux.warn("husbandry panel could not be registered")
         end
@@ -699,6 +724,24 @@ function AnimalRedux.onMissionLoaded()
         AnimalRedux.panelActive = false
         AnimalRedux.warn("Distribution Redux has no husbandry panel API (needs v4+, found v%d)",
             apiVersion)
+    end
+
+    -- ---- THE SETTINGS TAB (DR API v8) ---------------------------------------
+    -- Registered here rather than from the menu-ready callback, because the
+    -- SETTINGS page is DR's own and already exists: this only adds a row to DR's
+    -- tab registry, which the page reads on every open. Doing it now means the
+    -- saved values are applied by AnimalPersist a moment later and the first open
+    -- already shows them.
+    if AnimalSettings ~= nil and AnimalSettings.install ~= nil then
+        AnimalRedux.settingsTabActive = AnimalSettings.install(SD) and true or false
+    end
+
+    -- ---- THE USER GUIDE TAB (DR API v9) -------------------------------------
+    -- Same timing and the same reason as the settings tab above: the guide PAGE is
+    -- DR's and already exists, so this only adds a row to DR's tab registry, which
+    -- the page reads on every open.
+    if AnimalHelp ~= nil and AnimalHelp.install ~= nil then
+        AnimalRedux.helpTabActive = AnimalHelp.install(SD) and true or false
     end
 
     -- ---- THE TAB -------------------------------------------------------------
@@ -715,7 +758,7 @@ function AnimalRedux.onMissionLoaded()
         SD.API.onMenuReady(AnimalRedux.MOD_NAME, function(menu)
             local ok, why = HerdInspectorPage.install(menu)
             if ok then
-                AnimalRedux.warn("Herd Inspector tab added to the Distribution Redux menu")
+                AnimalRedux.log("Herd Inspector tab added to the Distribution Redux menu")
             else
                 AnimalRedux.warn("Herd Inspector tab NOT added: %s", tostring(why))
             end

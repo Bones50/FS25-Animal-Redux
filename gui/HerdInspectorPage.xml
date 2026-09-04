@@ -25,6 +25,7 @@
      layout, declined for the same reason in DR 5.33 and 6.15.
 
      Vertical budget, right pane, ending at exactly 810:
+         0  view tabs (40)
        -46  selectors (40)
        GROUPS   header -92 (40) | list -136 (674)
        BARN     panel  -92 (40) | strip -136 (146)
@@ -59,29 +60,50 @@
             <Text profile="fs25_menuHeaderTitle" text="$l10n_ar_hi_page_title" id="pageTitle"/>
         </GuiElement>
 
-        <!-- The selectors, in one 40px strip.
-             PERIOD comes SECOND because it applies to every view, while the filter
-             belongs to the GROUPS view alone and is hidden with it - so on the barn
-             view the two visible selectors sit together with no gap between them.
-             16 + 300 = 316 | 330 + 300 = 630 | 644 + 300 = 944 -->
+        <!-- ROW 1: THE VIEW TABS, hard under the page header.
+             They used to share one strip with the selectors at y=-46, which left a
+             gap above them four times the gap below (measured off a screenshot,
+             2026-09-01). y=0 to -46 was empty, so this closes it and NOTHING below
+             moves: the selectors take the row the tabs vacated and the content still
+             starts at -92.
+             Two tabs of 146px with a 6px gap: 16+146=162 | 168+146=314.
+             THE BACKGROUND IS DECLARED BEFORE ITS BUTTON in each pair, because
+             children draw in order and the label must sit ON it (DR 5.86).
+             These are the BASE GAME'S OWN tab profiles; unselected draws nothing, so
+             only the active tab shows a background. -->
+        <Bitmap profile="SDList" position="0px 0px" size="1480px 40px">
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg"
+                             position="16px 0px" size="146px 40px" name="arTabBg1" id="arTabBg1"/>
+            <Button profile="fs25_subCategorySelectorTabbedTab" position="16px 0px" size="146px 40px" textAutoWidth="false"
+                    name="arTabBtn1" id="arTabBtn1" onClick="onTab1"/>
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg"
+                             position="168px 0px" size="146px 40px" name="arTabBg2" id="arTabBg2"/>
+            <Button profile="fs25_subCategorySelectorTabbedTab" position="168px 0px" size="146px 40px" textAutoWidth="false"
+                    name="arTabBtn2" id="arTabBtn2" onClick="onTab2"/>
+            <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg"
+                             position="320px 0px" size="146px 40px" name="arTabBg3" id="arTabBg3"/>
+            <Button profile="fs25_subCategorySelectorTabbedTab" position="320px 0px" size="146px 40px" textAutoWidth="false"
+                    name="arTabBtn3" id="arTabBtn3" onClick="onTab3"/>
+        </Bitmap>
+
+        <!-- ROW 2: THE SELECTORS, LEFT ALIGNED under the tabs.
+             PERIOD comes first and sits at the same x as tab 1, so the column edge
+             runs straight down the page. The filter belongs to the GROUPS view alone
+             and is hidden with it, so on the barn view this row is a single control
+             at the left margin rather than a gap.
+             EVERY RATE ON THE PAGE IS QUOTED PER THE PERIOD. The column headers carry
+             no unit of their own (DR 5.11 dropped its "/mo" suffixes for the same
+             reason): one legend for the whole page beats eight headers that have to be
+             re-tiled every time the period changes.
+             16 + 300 = 316 | 330 + 300 = 630 -->
         <Bitmap profile="SDList" position="0px -46px" size="1480px 40px">
             <Bitmap profile="fs25_multiTextOptionContainer" position="16px 0px" size="300px 40px"
-                    imageColor="0 0 0 0">
-                <MultiTextOption profile="fs25_settingsMultiTextOption" id="viewOption"
-                                 onClick="onViewChanged"
-                                 textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
-            </Bitmap>
-            <!-- EVERY RATE ON THE PAGE IS QUOTED PER THIS. The column headers carry no
-                 unit of their own (DR 5.11 dropped its "/mo" suffixes for the same
-                 reason): one legend for the whole page beats eight headers that have
-                 to be re-tiled every time the period changes. -->
-            <Bitmap profile="fs25_multiTextOptionContainer" position="330px 0px" size="300px 40px"
                     imageColor="0 0 0 0">
                 <MultiTextOption profile="fs25_settingsMultiTextOption" id="periodOption"
                                  onClick="onPeriodChanged"
                                  textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
             </Bitmap>
-            <Bitmap profile="fs25_multiTextOptionContainer" id="filterBox" position="644px 0px"
+            <Bitmap profile="fs25_multiTextOptionContainer" id="filterBox" position="330px 0px"
                     size="300px 40px" imageColor="0 0 0 0" visible="false">
                 <MultiTextOption profile="fs25_settingsMultiTextOption" id="filterOption"
                                  onClick="onFilterChanged"
@@ -128,8 +150,11 @@
                   text="$l10n_ar_hi_col_change"/>
             <Text profile="SDHeaderRight" position="1112px 0px" size="140px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_total"/>
+            <!-- NAMED AND ID'd so the Herd Adviser setting can hide it. It is the
+                 LAST column, so hiding it leaves no gap and nothing has to re-tile:
+                 the table simply ends at 1260 instead of 1464. -->
             <Text profile="SDHeaderLeft" position="1260px 0px" size="204px 40px" textSize="11px"
-                  text="$l10n_ar_hi_col_rec"/>
+                  name="ghRec" id="ghRec" text="$l10n_ar_hi_col_rec"/>
         <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
         </Bitmap>
         <GuiElement profile="SDList" id="groupListBox" position="0px -136px" size="1480px 674px" visible="false">
@@ -341,6 +366,58 @@
              185px reclaimed from the gap went mostly here.
              16+24=40 | 48+128=176 | 184+42=226 | 234+46=280 | 288+62=350
              | 358+118=476 | 484+76=560 | 568+96=664, +16 margin = 680 -->
+        <!-- THE BREEDS VIEW. It reuses the BARN list on the left and fills the rest
+             of the page, because a breed's purpose is per BARN (29.1) and the barn
+             has to be chosen before the question means anything.
+
+             12 + 24 = 36 | 48 + 300 = 348 | 356 + 80 = 436 | 444 + 190 = 634 |
+             642 + 160 = 802 | 810 + 120 = 930 | 938 + 325 = 1263, inside 1275.
+
+             THE PURPOSE CELL IS AN ARROW PAIR AROUND A LABEL, the shape DR 5.64
+             proved for stepping a ring in a row. Purpose IS a ring of three
+             (producer, breeder, unset), which is exactly what a pair of arrows is
+             for and what a two state switch could not express. -->
+        <Bitmap profile="SDList" id="breedHeaderRow" position="205px -92px" size="1275px 40px"
+                visible="false">
+            <Text profile="SDHeaderLeft"  position="48px 0px"   size="200px 40px" textSize="11px" text="$l10n_ar_hi_col_breed"/>
+            <Text profile="SDHeaderRight" position="256px 0px"  size="70px 40px"  textSize="11px" text="$l10n_ar_hi_col_count"/>
+            <Text profile="SDHeaderLeft"  position="334px 0px"  size="190px 40px" textSize="11px" text="$l10n_ar_hi_col_keptFor"/>
+            <Text profile="SDHeaderLeft"  position="532px 0px"  size="240px 40px" textSize="11px" text="$l10n_ar_hi_col_advice"/>
+            <Text profile="SDHeaderRight" position="780px 0px"  size="100px 40px" textSize="11px" text="$l10n_ar_hi_col_output"/>
+            <Text profile="SDHeaderRight" position="888px 0px"  size="110px 40px" textSize="11px" text="$l10n_ar_hi_col_asProducer"/>
+            <Text profile="SDHeaderRight" position="1006px 0px" size="110px 40px" textSize="11px" text="$l10n_ar_hi_col_asBreeder"/>
+            <Text profile="SDHeaderLeft"  position="1124px 0px" size="139px 40px" textSize="11px" text="$l10n_ar_hi_col_whereFrom"/>
+            <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
+        </Bitmap>
+        <GuiElement profile="SDList" id="breedListBox" position="205px -136px" size="1275px 674px" visible="false">
+            <SmoothList profile="SDList" id="breedList" onClick="onBreedClick"
+                        onSelectionChanged="onListSelectionChanged"
+                        focusChangeTop="nil" focusChangeBottom="nil"
+                        position="0px 0px" size="1275px 674px">
+                <ListItem profile="SDListItemStats" name="breedRow" size="1275px 42px">
+                    <Bitmap name="brIcon" position="12px 9px" size="24px 24px" visible="false"/>
+                    <Text profile="SDRowCell"  position="48px 0px"   size="200px 42px" textSize="12px" name="brName"/>
+                    <Text profile="SDRowCellR" position="256px 0px"  size="70px 42px"  textSize="12px" name="brCount"/>
+                    <!-- the label sits between the arrows, and the arrows are
+                         declared AFTER it so they take the mouse first (children are
+                         visited in reverse) and draw over it if they overlap. -->
+                    <Text profile="SDRowCell"  position="378px 0px"  size="96px 42px"  textSize="12px" name="brPurpose"/>
+                    <Button profile="fs25_multiTextOptionLeft" position="334px 0px" name="brPrev" onClick="onBreedPrev"/>
+                    <Button profile="ARRowArrowRight"          position="478px 0px" name="brNext" onClick="onBreedNext"/>
+                    <Text profile="SDRowCell"  position="532px 0px"  size="240px 42px" textSize="12px" name="brAdvice"/>
+                    <Text profile="SDRowCellR" position="780px 0px"  size="100px 42px" textSize="12px" name="brEarns"/>
+                    <Text profile="SDRowCellR" position="888px 0px"  size="110px 42px" textSize="12px" name="brKeeps"/>
+                    <Text profile="SDRowCellR" position="1006px 0px" size="110px 42px" textSize="12px" name="brCalf"/>
+                    <Text profile="SDRowCell"  position="1124px 0px" size="139px 42px" textSize="12px" name="brTerms"/>
+                </ListItem>
+            </SmoothList>
+            <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"
+                             size="12px 674px" with="anchorTopRight">
+                <Slider profile="fs25_listSlider" size="6px 666px"
+                        dataElementId="breedList" id="breedListSlider" />
+            </ThreePartBitmap>
+        </GuiElement>
+
         <Bitmap profile="SDList" id="bgHeaderRow" position="205px -286px" size="680px 40px"
                 visible="false">
             <Text profile="SDHeaderLeft" position="48px 0px" size="128px 40px" textSize="11px"

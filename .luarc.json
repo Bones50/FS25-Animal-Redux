@@ -14,10 +14,16 @@
 		"FillPlaneUtil", "DensityMapHeightUtil", "FSDensityMapUtil",
 		"ClassUtil", "StringUtil", "Overlay",
 
-		"Mission00", "Placeable", "PlaceableSystem", "Storage", "PalletSpawner",
+		"Mission00", "Placeable", "MessageDialog", "PlaceableSystem", "Storage", "PalletSpawner",
 		"BunkerSilo", "SellingStation", "UnloadingStation", "ProductionPoint",
 		"AnimalFoodSystem", "AnimalSystem", "AnimalType", "AnimalCluster",
 		"FarmManager", "FSCareerMissionInfo", "InputAction", "Event",
+
+		"MessageType", "AnimalScreenDealerFarm", "AnimalItemNew",
+
+		"loadXMLFile", "createXMLFile", "saveXMLFile", "hasXMLProperty", "delete",
+		"getXMLInt", "getXMLFloat", "getXMLBool", "getXMLString",
+		"setXMLInt", "setXMLFloat", "setXMLBool", "setXMLString",
 
 		"addConsoleCommand", "removeConsoleCommand", "addModEventListener",
 		"getUserProfileAppPath", "fileExists", "createFolder", "getfenv",
@@ -27,7 +33,11 @@
 		"streamWriteBool", "streamReadBool", "streamWriteFloat32", "streamReadFloat32",
 		"NetworkUtil", "unpack",
 
-		"AnimalRedux", "AnimalFoodProbe",
+		"g_modIsLoaded",
+		"AnimalRedux", "AnimalFoodProbe", "AnimalHerdData", "AnimalFeedModel",
+		"AnimalEconomics", "AnimalSellRules", "AnimalSellExecutor", "AnimalTrade",
+		"AnimalPersist", "AnimalBuySchedule", "AnimalTradeDialog", "HerdInspectorPage",
+		"AnimalSellPolicy", "AnimalSellSchedule", "AnimalTabs", "AnimalBuyScheduleDialog",
 		"FS25_Distribution_Redux", "SmartDistribution"
 	],
 
