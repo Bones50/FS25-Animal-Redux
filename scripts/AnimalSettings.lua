@@ -70,7 +70,7 @@ end
 --
 -- Order here is the order of the rows on screen: the two that change what the
 -- player can do first, the diagnostic one last.
-AnimalSettings.ORDER = { "trading", "autoTrader", "herdAdviser", "advancedFeeder", "debug" }
+AnimalSettings.ORDER = { "trading", "autoTrader", "herdAdviser", "advancedFeeder", "debug", "passProfiler" }
 
 AnimalSettings.DEFS = {
     trading = {
@@ -124,6 +124,29 @@ AnimalSettings.DEFS = {
         title   = "ar_set_debug",
         tooltip = "ar_set_debug_tt",
         strings = { "ar_set_off", "ar_set_on" },
+    },
+    -- DISTRIBUTION REDUX'S hourly-pass profiler, offered from here as well. DR owns the pass and
+    -- owns the profiler; this is a second door onto the same switch, because a player asked for a
+    -- performance report should not have to be told which of the two mods the setting lives in.
+    --
+    -- THE TWO ARE OR'd, NOT OVERRIDDEN -- DR takes the highest level anyone requested
+    -- (SmartDistribution.passProfilerLevel), so turning it on here can never be undone by DR's own
+    -- copy sitting at a lower value, and vice versa. Last-writer-wins would have made the result
+    -- depend on which settings page applied last, which is indistinguishable from the setting not
+    -- working.
+    --
+    -- Values and wording match DR's exactly. Two pages describing one switch in different words
+    -- would be worse than not offering it twice at all.
+    --
+    -- INERT WITHOUT DR, by construction rather than by a guard: onChanged reaches DR through the
+    -- same optional-API pattern everything else here uses, so with DR absent the row still moves
+    -- and simply asks nobody for anything.
+    passProfiler = {
+        values  = { 0, 1, 2 },
+        default = 2,                       -- Slow passes only, matching DR's shipped default
+        title   = "ar_set_passProfiler",
+        tooltip = "ar_set_passProfiler_tt",
+        strings = { "ar_set_prof_off", "ar_set_prof_slow", "ar_set_prof_all" },
     },
 }
 
@@ -282,7 +305,13 @@ end
 ---A setting moved. Everything that has to happen as a consequence happens here,
 -- so there is one place to read rather than a side effect per caller.
 function AnimalSettings.onChanged(id, value, previousIndex)
-    if id == "debug" then
+    if id == "passProfiler" then
+        -- Hand the request to DR and let it resolve; we never read or write DR's own setting.
+        AnimalSettings.pushPassProfiler()
+        warn("performance logging -> %s",
+             value == 0 and "off" or (value == 2 and "every pass" or "slow passes only"))
+
+    elseif id == "debug" then
         -- The only setting that takes effect on the spot and needs nothing else.
         if AnimalRedux ~= nil then AnimalRedux.debug = (value == true) end
         warn("debug logging %s", value and "ON" or "OFF")
@@ -419,6 +448,12 @@ local function loadSection(xml, key)
     -- Applied AFTER the whole section is read, so a half-read file cannot leave
     -- the debug flag half-applied.
     if AnimalRedux ~= nil then AnimalRedux.debug = AnimalSettings.debugEnabled() end
+    -- ...and the same for the profiler request. The loader is SILENT, so onChanged never fires and
+    -- nothing would otherwise carry a restored value across to DR -- the row would read "Every pass"
+    -- while DR logged nothing, which is precisely the shape of bug that looks like the setting being
+    -- ignored. Safe if DR is absent or has not finished loading: the push simply finds no API and
+    -- returns false, and DR falls back to its own value.
+    AnimalSettings.pushPassProfiler()
     if i > 0 then dbg("%d setting(s) restored", i) end
 end
 
@@ -434,6 +469,22 @@ end
 -- a later build works without a bump here -- the rule the husbandry panel already
 -- follows. A DR too old simply has no AR settings tab, and every setting keeps
 -- its default, which is every feature ON except debug.
+---Register our requested profiler level with Distribution Redux.
+--
+-- Called on change AND after loading a savegame, because the stored value has to reach DR without
+-- the player touching the row -- otherwise the setting would appear to reset itself every session.
+--
+-- DR resolves the MAXIMUM across every mod that asks, so this is a request, not an assignment: it
+-- cannot switch DR's own choice off.
+function AnimalSettings.pushPassProfiler()
+    local SD = _G["FS25_Distribution_Redux"] ~= nil and _G["FS25_Distribution_Redux"].SmartDistribution or nil
+    if SD == nil or SD.requestPassProfiler == nil then return false end
+    local lvl = AnimalSettings.get("passProfiler")
+    if type(lvl) ~= "number" then return false end
+    pcall(SD.requestPassProfiler, AnimalSettings.MOD_NAME, lvl)
+    return true
+end
+
 function AnimalSettings.install(SD)
     if SD == nil or SD.API == nil or SD.API.registerSettingsTab == nil then
         warn("Distribution Redux has no settings tab API (needs v8+); AR settings are not shown")

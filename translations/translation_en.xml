@@ -489,6 +489,11 @@
 
         <text name="ar_set_debug"          text="Debug logging"/>
         <text name="ar_set_debug_tt"       text="Extra Animal Redux lines in log.txt. Leave this off unless you are reporting a problem. Anything that actually goes wrong is logged either way."/>
+        <text name="ar_set_passProfiler"    text="Performance logging"/>
+        <text name="ar_set_passProfiler_tt" text="Writes what Distribution Redux's hourly pass cost to log.txt, and how many world scans it made. Leave on Slow passes only - it is silent unless an hourly pass takes longer than 150ms. Switch to Every pass if you are asked for a performance report: it then logs two lines every in-game hour, which is what lets a healthy farm be compared against a slow one. This is the same setting as the one on Distribution Redux's own page, and either one being on enables it."/>
+        <text name="ar_set_prof_off"        text="Off"/>
+        <text name="ar_set_prof_slow"       text="Slow passes only"/>
+        <text name="ar_set_prof_all"        text="Every pass (diagnostic)"/>
 
         <!-- The confirmation raised when the Auto Trader is switched off. It NAMES
              the counts, because "this will delete things" is not a question a

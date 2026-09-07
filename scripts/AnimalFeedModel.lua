@@ -343,13 +343,19 @@ function AnimalFeedModel.planWithin(model, litres, allowed)
 
     local usable, sum = {}, 0
     for _, g in ipairs(model.groups) do
-        local members = {}
+        -- DEDUPED WITHIN THE GROUP. A ration that is ALSO one of the group's own crops would
+        -- otherwise be listed twice, and DR issues one full placeableSystem walk per entry in
+        -- this list (buildSlotCandidates -> gatherSources) -- so a repeat is not a cosmetic
+        -- untidiness, it is a world scan bought for nothing.
+        local members, seen = {}, {}
         for _, ft in ipairs(g.fts) do
-            if ok[ft] then members[#members + 1] = ft end
+            if ok[ft] and not seen[ft] then seen[ft] = true; members[#members + 1] = ft end
         end
         -- offered even when the group itself has no allowed member: a complete
         -- ration can satisfy a group whose own crops are blocked or absent
-        for _, ft in ipairs(rations) do members[#members + 1] = ft end
+        for _, ft in ipairs(rations) do
+            if not seen[ft] then seen[ft] = true; members[#members + 1] = ft end
+        end
         if #members > 0 then
             usable[#usable + 1] = { members = members, eat = g.eat, production = g.production }
             sum = sum + g.eat
@@ -372,9 +378,21 @@ function AnimalFeedModel.planWithin(model, litres, allowed)
         -- the best tier it can actually source and falls back when that runs
         -- short -- which is exactly what its own best-first logic always did well,
         -- and the reason SERIAL animals never needed fixing in the first place.
-        local all = {}
+        -- DEDUPED ACROSS GROUPS. Every group's members carry the full ration list (above), so a
+        -- flat concatenation lists TMR once PER GROUP -- and DR walks the whole placeableSystem
+        -- once per entry, so a 4-group cow barn bought ~8 identical world scans where 1-2 would
+        -- do. Nothing is lost: this is ONE request whose entries are ALTERNATIVES, so a repeated
+        -- alternative cannot change which fill type is chosen. Order is preserved (first
+        -- occurrence wins), so the quality preference DR applies on top is unaffected.
+        --
+        -- NOT done for PARALLEL below, and that distinction is the point: there each group is its
+        -- OWN entry with its own litres, so the same ration appearing in two entries is two
+        -- genuinely different requests, not a duplicate.
+        local all, seenAll = {}, {}
         for _, u in ipairs(usable) do
-            for _, ft in ipairs(u.members) do all[#all + 1] = ft end
+            for _, ft in ipairs(u.members) do
+                if not seenAll[ft] then seenAll[ft] = true; all[#all + 1] = ft end
+            end
         end
         out[1] = { fillTypes = all, litres = litres }
         return out
