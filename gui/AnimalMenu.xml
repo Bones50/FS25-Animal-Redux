@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!-- Animal Redux: THIS MOD'S OWN FULL SCREEN MENU.
+     Added 2026-09-07 for the standalone plan, ported from Distribution Redux's
+     DistributionMenu.xml, which is the shape this game wants a modded TabbedMenu
+     to be and which is already proven in play.
+
+     IT ONLY EXISTS WHEN DR IS NOT INSTALLED. With DR present AR registers its
+     pages into DR's menu exactly as before, and none of this is loaded, so a
+     player running both sees no change at all.
+
+     PURE CHROME: the left tab strip, the footer button bar and the background.
+     Every actual page is a FrameReference to a GUI loaded separately by name.
+     The pages carry the hand tiled column geometry; nothing here does.
+
+     NO TAB BADGE, unlike DR's. That element exists so ONE tab can carry two
+     icons (DR 5.86) and was added for AR's tab inside DR's menu. Here every tab
+     is ours and says so by its own icon.
+-->
+<GUI onOpen="onOpen" onClose="onClose" onCreate="onCreate">
+    <Bitmap profile="fs25_fullScreenBackground" id="background" imageColor="0.01681 0.01764 0.016 0.99"/>
+
+    <Paging profile="uiInGameMenuPaging" onPageChange="onPageChange" onPageUpdate="onPageUpdate" id="pagingElement">
+        <FrameReference ref="animalHerdInspectorPage" name="animalHerdInspectorPage" id="pageHerd"/>
+        <FrameReference ref="animalSettingsPage" name="animalSettingsPage" id="pageSettings"/>
+        <FrameReference ref="animalHelpPage" name="animalHelpPage" id="pageHelp"/>
+    </Paging>
+
+    <Bitmap profile="fs25_tabListContainer" id="header">
+        <MultiTextOption profile="uiInGameMenuHeaderSelector" onClick="onClickPageSelection" id="pageSelector" soundDisabled="true"/>
+        <SmoothList profile="fs25_tabList" id="pagingTabList" onSelectionChanged="onTabMenuSelectionChanged" onScroll="onTabMenuScroll">
+            <ListItem profile="fs25_tabListItem">
+                <Button profile="fs25_tabListItemButton" name="tabButton" soundDisabled="true"/>
+                <Bitmap profile="fs25_tabListItemSeparator"/>
+                <Bitmap profile="fs25_tabListItemSeparatorBottom"/>
+            </ListItem>
+        </SmoothList>
+    </Bitmap>
+
+    <!-- FIVE SLOTS, like DR's. TabbedMenu fills them from each page's
+         setMenuButtonInfo and hides the rest, so the count is a ceiling rather
+         than a layout. Five is also the point where the key glyphs start to
+         scramble (DR 5.4), so it is a ceiling worth keeping. -->
+    <BoxLayout profile="fs25_buttonBox" id="buttonsPanel">
+        <Button profile="buttonBack" onClick="onClickBack" id="menuButton[1]">
+            <Bitmap profile="fs25_buttonBoxSeparator" name="separator"/>
+        </Button>
+        <Button profile="buttonBack" onClick="onClickBack" id="menuButton[2]">
+            <Bitmap profile="fs25_buttonBoxSeparator" name="separator"/>
+        </Button>
+        <Button profile="buttonBack" onClick="onClickBack" id="menuButton[3]">
+            <Bitmap profile="fs25_buttonBoxSeparator" name="separator"/>
+        </Button>
+        <Button profile="buttonBack" onClick="onClickBack" id="menuButton[4]">
+            <Bitmap profile="fs25_buttonBoxSeparator" name="separator"/>
+        </Button>
+        <Button profile="buttonBack" onClick="onClickBack" id="menuButton[5]">
+            <Bitmap profile="fs25_buttonBoxSeparator" name="separator"/>
+        </Button>
+    </BoxLayout>
+</GUI>

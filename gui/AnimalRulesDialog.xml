@@ -25,7 +25,7 @@
     <GuiElement type="empty" profile="newLayer" />
     <Bitmap profile="dialogFullscreenBg" id="dialogBg" />
 
-    <GuiElement profile="SDAdvDialogBox" id="dialogElement">
+    <GuiElement profile="ARAdvDialogBox" id="dialogElement">
         <ThreePartBitmap profile="fs25_dialogBgMiddleSmall" />
         <ThreePartBitmap profile="fs25_dialogBgTopSmall" />
         <ThreePartBitmap profile="fs25_dialogBgBottom" />
@@ -37,15 +37,15 @@
             <!-- WHAT THIS HERD IS KEPT FOR, stated rather than assumed: the answers
                  below only make sense against it, and it is set on the tab behind
                  this window rather than here. -->
-            <Bitmap profile="SDList" position="40px -118px" size="1320px 34px" imageColor="0 0 0 0">
-                <Text profile="SDBarLabel" position="12px 0px" size="1296px 34px" textSize="14px" id="purposeText"/>
+            <Bitmap profile="ARList" position="40px -118px" size="1320px 34px" imageColor="0 0 0 0">
+                <Text profile="ARBarLabel" position="12px 0px" size="1296px 34px" textSize="14px" id="purposeText"/>
             </Bitmap>
 
             <!-- SIX GENERIC SLOTS at a 62px pitch (label 20 + option 38 + 4), the
                  first at -166, so slot 6 ends at -534. Each is hidden when the
                  current purpose asks fewer questions than six. -->
-            <Bitmap profile="SDList" position="40px -166px" size="640px 20px" imageColor="0 0 0 0" id="lblBox1">
-                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl1" />
+            <Bitmap profile="ARList" position="40px -166px" size="640px 20px" imageColor="0 0 0 0" id="lblBox1">
+                <Text profile="ARBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl1" />
             </Bitmap>
             <Bitmap profile="fs25_multiTextOptionContainer" position="700px -166px" size="620px 38px"
                     imageColor="0 0 0 0" id="optBox1">
@@ -53,8 +53,8 @@
                                  onClick="onOpt1" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
             </Bitmap>
 
-            <Bitmap profile="SDList" position="40px -228px" size="640px 20px" imageColor="0 0 0 0" id="lblBox2">
-                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl2" />
+            <Bitmap profile="ARList" position="40px -228px" size="640px 20px" imageColor="0 0 0 0" id="lblBox2">
+                <Text profile="ARBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl2" />
             </Bitmap>
             <Bitmap profile="fs25_multiTextOptionContainer" position="700px -228px" size="620px 38px"
                     imageColor="0 0 0 0" id="optBox2">
@@ -62,8 +62,8 @@
                                  onClick="onOpt2" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
             </Bitmap>
 
-            <Bitmap profile="SDList" position="40px -290px" size="640px 20px" imageColor="0 0 0 0" id="lblBox3">
-                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl3" />
+            <Bitmap profile="ARList" position="40px -290px" size="640px 20px" imageColor="0 0 0 0" id="lblBox3">
+                <Text profile="ARBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl3" />
             </Bitmap>
             <Bitmap profile="fs25_multiTextOptionContainer" position="700px -290px" size="620px 38px"
                     imageColor="0 0 0 0" id="optBox3">
@@ -71,8 +71,8 @@
                                  onClick="onOpt3" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
             </Bitmap>
 
-            <Bitmap profile="SDList" position="40px -352px" size="640px 20px" imageColor="0 0 0 0" id="lblBox4">
-                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl4" />
+            <Bitmap profile="ARList" position="40px -352px" size="640px 20px" imageColor="0 0 0 0" id="lblBox4">
+                <Text profile="ARBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl4" />
             </Bitmap>
             <Bitmap profile="fs25_multiTextOptionContainer" position="700px -352px" size="620px 38px"
                     imageColor="0 0 0 0" id="optBox4">
@@ -80,8 +80,8 @@
                                  onClick="onOpt4" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
             </Bitmap>
 
-            <Bitmap profile="SDList" position="40px -414px" size="640px 20px" imageColor="0 0 0 0" id="lblBox5">
-                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl5" />
+            <Bitmap profile="ARList" position="40px -414px" size="640px 20px" imageColor="0 0 0 0" id="lblBox5">
+                <Text profile="ARBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl5" />
             </Bitmap>
             <Bitmap profile="fs25_multiTextOptionContainer" position="700px -414px" size="620px 38px"
                     imageColor="0 0 0 0" id="optBox5">
@@ -89,8 +89,8 @@
                                  onClick="onOpt5" textColor="0.9 0.9 0.9 1" textColorHighlight="1 1 1 1"/>
             </Bitmap>
 
-            <Bitmap profile="SDList" position="40px -476px" size="640px 20px" imageColor="0 0 0 0" id="lblBox6">
-                <Text profile="SDBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl6" />
+            <Bitmap profile="ARList" position="40px -476px" size="640px 20px" imageColor="0 0 0 0" id="lblBox6">
+                <Text profile="ARBarLabel" position="12px 0px" size="628px 20px" textSize="13px" id="lbl6" />
             </Bitmap>
             <Bitmap profile="fs25_multiTextOptionContainer" position="700px -476px" size="620px 38px"
                     imageColor="0 0 0 0" id="optBox6">
@@ -101,8 +101,8 @@
             <!-- WHAT THE TOUCHED RULE DOES, in a sentence. These settings are not
                  self explanatory from a short label and there is nowhere else in
                  the window to say so. -->
-            <Bitmap profile="SDList" position="40px -556px" size="1320px 48px" imageColor="0 0 0 0">
-                <Text profile="SDBarLabel" position="12px 0px" size="1296px 48px" textSize="12px"
+            <Bitmap profile="ARList" position="40px -556px" size="1320px 48px" imageColor="0 0 0 0">
+                <Text profile="ARBarLabel" position="12px 0px" size="1296px 48px" textSize="12px"
                       textMaxNumLines="2" id="noteText"/>
             </Bitmap>
         </GuiElement>

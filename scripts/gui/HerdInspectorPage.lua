@@ -92,11 +92,14 @@ local function l10n(key, fallback)
     return fallback
 end
 
----Volumes through DR's own formatter, so this tab reads like every other one.
+---Volumes: litres below 1,000, kilolitres above. AR'S OWN COPY, used always.
+--
+-- This used to call DR's formatVolume with a bare "%d L" fallback, so the SAME figure read
+-- "600 kL" or "600000 L" depending on whether DR happened to be installed. AnimalPanel carries a
+-- port of DR 5.56's formatter, so the page reads identically either way.
 local function vol(v)
-    local SD = AnimalRedux ~= nil and AnimalRedux.DR or nil
-    if SD ~= nil and SD.formatVolume ~= nil then
-        local ok, s = pcall(SD.formatVolume, v)
+    if AnimalPanel ~= nil and AnimalPanel.formatVolume ~= nil then
+        local ok, s = pcall(AnimalPanel.formatVolume, v)
         if ok and s ~= nil then return s end
     end
     return string.format("%d L", math.floor((v or 0) + 0.5))
@@ -536,9 +539,23 @@ function HerdInspectorPage:buildProductionRows(b)
         if AnimalEconomics ~= nil and AnimalEconomics.pricePerLitre ~= nil then
             price = AnimalEconomics.pricePerLitre(e.fillType)
         end
+        -- DR'S FIGURE WHEN DR IS THERE, OUR OWN WHEN IT IS NOT -- and here that preference is the
+        -- right way round, unlike the panel above. DR's assetHeld is EXACT: it folds a pen's pallets
+        -- and its pending queue into one figure (DR 5.21), and while DR is running it also owns
+        -- spec_husbandryPallets.fillLevels outright (DR 5.32). AnimalHerdData.heldOf can only
+        -- APPROXIMATE that from the specs, so preferring the exact source where it exists keeps one
+        -- basis for one quantity across both mods, which is what this column was written for.
+        --
+        -- THE FALLBACK IS HARNESS-TESTED (tools/herdinspector.lua) rather than left to be exercised
+        -- only by players without DR -- which is the objection that made the PANEL always use AR's
+        -- own copy. An untested fallback rots; a tested one is simply the standalone answer.
         local held = nil
         if SD ~= nil and SD.assetHeld ~= nil and e.fillType ~= nil then
             local okH, h = pcall(SD.assetHeld, b.placeable, e.fillType)
+            if okH and type(h) == "number" then held = h end
+        end
+        if held == nil and AnimalHerdData ~= nil and AnimalHerdData.heldOf ~= nil then
+            local okH, h = pcall(AnimalHerdData.heldOf, b.placeable, e.fillType)
             if okH and type(h) == "number" then held = h end
         end
         rows[#rows + 1] = {
@@ -781,9 +798,13 @@ end
 -- The panel's child NAMES are the contract. They are copied verbatim in the XML
 -- for that reason; renaming one draws nothing and reports nothing.
 function HerdInspectorPage:updateSummary()
-    local SD = AnimalRedux ~= nil and AnimalRedux.DR or nil
+    -- DRAWN BY AR'S OWN RENDERER (AnimalPanel), not DR's, since 2026-09-07. This page used to call
+    -- SmartDistribution.drawHusbandryPanel, which meant the whole strip rendered NOTHING with DR
+    -- uninstalled -- the panel is AR's own data on AR's own page and had no business needing it.
+    -- AR's copy is used ALWAYS, with or without DR: a renderer exercised only in the rare
+    -- configuration is one that rots unnoticed and fails the first time somebody needs it.
     local root = self.animalPanel
-    if SD == nil or root == nil or SD.drawHusbandryPanel == nil then return end
+    if root == nil or AnimalPanel == nil or AnimalPanel.drawHusbandryPanel == nil then return end
     local onBarn = (self:viewIndexSafe() == HerdInspectorPage.VIEW_BARN)
     local b = onBarn and (self.barns or {})[self.selectedBarn] or nil
 
@@ -791,9 +812,12 @@ function HerdInspectorPage:updateSummary()
     -- it has data, so applyView hiding it first achieved nothing: this runs LAST
     -- and put it straight back on the groups view. Passing nil is that function's
     -- own contract for "hide", so the two are not fighting over one element.
+    -- STRAIGHT TO OUR OWN PROVIDER. SD.husbandryPanelData was only ever DR's wrapper around this
+    -- very function -- DR asks us for the data and hands it back to its renderer -- so going through
+    -- DR to reach our own code was a round trip that also happened to require DR to exist.
     local data = nil
-    if b ~= nil and b.placeable ~= nil and SD.husbandryPanelData ~= nil then
-        local ok, d = pcall(SD.husbandryPanelData, b.placeable)
+    if b ~= nil and b.placeable ~= nil and AnimalRedux ~= nil and AnimalRedux.husbandryPanel ~= nil then
+        local ok, d = pcall(AnimalRedux.husbandryPanel, b.placeable)
         if ok then data = d end
     end
     -- THE PANEL FOLLOWS THIS PAGE'S PERIOD SELECTOR. The provider states profit per
@@ -805,7 +829,7 @@ function HerdInspectorPage:updateSummary()
                    profitLabel = l10n(per.profit, per.profitFallback) }
     -- nil hides the panel, which is drawHusbandryPanel's own contract for a barn
     -- that cannot answer - better than a strip of dashes claiming to be figures
-    pcall(SD.drawHusbandryPanel, root, data, opts)
+    pcall(AnimalPanel.drawHusbandryPanel, root, data, opts)
     if self.panelHeader ~= nil and self.panelHeader.setVisible ~= nil then
         pcall(self.panelHeader.setVisible, self.panelHeader, onBarn)
     end
@@ -1583,14 +1607,25 @@ end
 -- ---------------------------------------------------------------------------
 -- INSTALL
 -- ---------------------------------------------------------------------------
+---Build the page class on whichever base is available, and hand it to whichever menu will host it.
+--
+-- TWO HOSTS, ONE PAGE. With DR installed the page extends DR's DistributionMenuPage and is added to
+-- DR's menu, exactly as it always has been. Without DR it extends AR's own AnimalMenuPage and is
+-- added to AR's own menu. The page's own code is identical either way -- it only ever calls
+-- onGuiSetupFinished and onFrameOpen on its super, and both bases provide them.
 function HerdInspectorPage.install(menu)
     local SD  = AnimalRedux ~= nil and AnimalRedux.DR or nil
     local env = AnimalRedux ~= nil and AnimalRedux.DR_ENV or nil
-    if SD == nil or env == nil or menu == nil then return false, "no DR menu" end
 
-    local base = env.DistributionMenuPage
-    if base == nil then return false, "DR's DistributionMenuPage not found" end
-    if SD.API == nil or SD.API.loadMenuPage == nil or SD.API.addMenuPage == nil then
+    -- PREFER DR'S BASE WHEN DR IS THERE. Not for its own sake, but because DR's menu hosts the page
+    -- and a frame whose class does not match the menu's expectations is the kind of mismatch DR 5.66
+    -- records killing a whole menu on every frame. One host, one base.
+    local base = (env ~= nil) and env.DistributionMenuPage or nil
+    if base == nil then base = AnimalMenuPage end
+    if base == nil then return false, "no page base class available" end
+
+    local standalone = (SD == nil or env == nil or menu == nil)
+    if not standalone and (SD.API == nil or SD.API.loadMenuPage == nil or SD.API.addMenuPage == nil) then
         return false, "DR's menu API is older than v3"
     end
 
@@ -1626,8 +1661,16 @@ function HerdInspectorPage.install(menu)
     end
 
     local page = HerdInspectorPage.new()
-    if not SD.API.loadMenuPage(page, "herdInspectorPage",
-                               AnimalRedux.MOD_DIR .. "gui/HerdInspectorPage.xml") then
+    local pageXml = AnimalRedux.MOD_DIR .. "gui/HerdInspectorPage.xml"
+    if standalone then
+        -- THE SAME THING DR's loadMenuPage DOES, done here because there is no DR to do it.
+        -- g_gui:loadGui with a frame instance registers it under `guiName` -- and that name has to
+        -- match the FrameReference in AnimalMenu.xml exactly, or the paging element resolves nothing
+        -- and the tab comes up blank with no error at all.
+        if g_gui == nil then return false, "no g_gui" end
+        local okL = pcall(g_gui.loadGui, g_gui, pageXml, "animalHerdInspectorPage", page, true)
+        if not okL then return false, "page XML failed to load (standalone)" end
+    elseif not SD.API.loadMenuPage(page, "herdInspectorPage", pageXml) then
         return false, "page XML failed to load"
     end
 
@@ -1641,7 +1684,15 @@ function HerdInspectorPage.install(menu)
     -- two views as TABS they are peers, there is nothing to step back out of, and
     -- a BACK that behaved differently from every other DR tab would now be the
     -- surprise rather than the courtesy.
-    local back = SD.API.menuBackButton(menu)
+    -- STANDALONE BUILDS ITS OWN. DR hands us its menu's back button so the footer matches the menu
+    -- hosting us; with no DR we make the same thing from the base game's own translated key, which
+    -- is what DR's does internally anyway.
+    local back = SD ~= nil and SD.API ~= nil and not standalone
+        and SD.API.menuBackButton(menu)
+        or { inputAction = InputAction.MENU_BACK,
+             text = (g_i18n ~= nil and g_i18n:getText("button_back")) or "Back",
+             callback = function() if g_gui ~= nil then g_gui:changeScreen(nil) end end,
+             showWhenPaused = true }
     -- BUY / SELL, on both views. The dialog is registered here rather than at load
     -- because g_gui must exist and DR's profiles must already be in it -- this page
     -- has both by construction, being installed into DR's own menu.
@@ -1724,11 +1775,30 @@ function HerdInspectorPage.install(menu)
     -- badgeSliceId is OPTIONAL and needs DR API v7. An older DR ignores the extra
     -- argument entirely, so the tab simply carries the animals icon alone rather
     -- than failing to install -- which is why this is not gated on the version.
-    local ok = SD.API.addMenuPage(menu, page, nil, "gui.icon_ingameMenu_animals",
-                                  l10n("ar_hi_tab_title", "Herd Inspector"),
-                                  function() return true end,
-                                  buttons,
-                                  "gui.icon_construction_buildings")
+    -- STANDALONE: the page is declared in AnimalMenu.xml and the menu registers it itself, so there
+    -- is nothing to ADD -- only the footer buttons to hand over. DR's addMenuPage exists because it
+    -- has to splice a page into a menu that was already built; AR's menu is built around this page.
+    -- NO BADGE either: the badge's whole purpose was to mark OUR tab inside DR's menu (DR 5.86).
+    local ok = true
+    if standalone then
+        if page.setMenuButtonInfo ~= nil then page:setMenuButtonInfo(buttons) end
+    else
+        -- OUR OWN PICTURE (DR API v10), with the stock slice and badge still passed behind it.
+        -- Both are handed over UNCONDITIONALLY and there is no version test: a DR that predates
+        -- icon files ignores the 9th argument and shows the animals slice with the buildings
+        -- badge exactly as before, while one that supports it draws the picture and suppresses
+        -- the badge itself. The badge only ever existed because no single stock slice says
+        -- "animals AND buildings"; the drawn icon says both on its own.
+        --
+        -- ABSOLUTE PATH, because GuiOverlay.resolveFilename does no mod-relative resolution
+        -- (DR 5.80) -- MOD_DIR is where the mod actually is, zipped or not.
+        ok = SD.API.addMenuPage(menu, page, nil, "gui.icon_ingameMenu_animals",
+                                l10n("ar_hi_tab_title", "Herd Inspector"),
+                                function() return true end,
+                                buttons,
+                                "gui.icon_construction_buildings",
+                                (AnimalRedux.MOD_DIR or "") .. "gui/icon_herdInspector.png")
+    end
     if not ok then return false, "addMenuPage refused" end
 
     HerdInspectorPage._page = page

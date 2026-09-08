@@ -25,7 +25,7 @@
     <GuiElement type="empty" profile="newLayer" />
     <Bitmap profile="dialogFullscreenBg" id="dialogBg" />
 
-    <GuiElement profile="SDInputsDialogBox" id="dialogElement">
+    <GuiElement profile="ARInputsDialogBox" id="dialogElement">
         <ThreePartBitmap profile="fs25_dialogBgMiddleSmall" />
         <ThreePartBitmap profile="fs25_dialogBgTopSmall" />
         <ThreePartBitmap profile="fs25_dialogBgBottom" />
@@ -39,7 +39,7 @@
                  The barn box is HIDDEN when the dialog was opened from a barn view,
                  because there is then nothing to choose.
                  40 + 300 = 340 | 360 + 500 = 860 -->
-            <Bitmap profile="SDList" position="40px -118px" size="300px 40px" imageColor="0 0 0 0">
+            <Bitmap profile="ARList" position="40px -118px" size="300px 40px" imageColor="0 0 0 0">
             <!-- THE MODE TABS, in the space the mode SELECTOR occupied. Two tabs of 146px: 0+146=146 | 152+146=298, inside 300.
                  THE BASE GAME'S OWN TAB PROFILES: a three part selected background
                  (gui.tab_selected_left / _middle / _right) under a tab label, exactly
@@ -71,31 +71,31 @@
                  serves and only the header wording changes.
                  12+24=36 | 48+250=298 | 306+80=386 | 394+100=494 | 502+120=622
                  | 630+130=760 -->
-            <Bitmap profile="SDList" position="40px -170px" size="760px 34px">
-                <Text profile="SDHeaderLeft"  position="48px 0px"  size="280px 34px" textSize="11px"
+            <Bitmap profile="ARList" position="40px -170px" size="760px 34px">
+                <Text profile="ARHeaderLeft"  position="48px 0px"  size="280px 34px" textSize="11px"
                       text="$l10n_ar_td_col_animal" id="hdrAnimal"/>
-                <Text profile="SDHeaderLeft"  position="336px 0px" size="110px 34px" textSize="11px"
+                <Text profile="ARHeaderLeft"  position="336px 0px" size="110px 34px" textSize="11px"
                       text="$l10n_ar_td_col_age"/>
-                <Text profile="SDHeaderLeft"  position="454px 0px" size="140px 34px" textSize="11px"
+                <Text profile="ARHeaderLeft"  position="454px 0px" size="140px 34px" textSize="11px"
                       text="$l10n_ar_td_col_each"/>
-                <Text profile="SDHeaderLeft"  position="602px 0px" size="140px 34px" textSize="11px"
+                <Text profile="ARHeaderLeft"  position="602px 0px" size="140px 34px" textSize="11px"
                       text="$l10n_ar_td_col_eachNet" id="hdrEachNet"/>
                 <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
             </Bitmap>
-            <GuiElement profile="SDList" position="40px -208px" size="760px 492px">
+            <GuiElement profile="ARList" position="40px -208px" size="760px 492px">
                 <!-- onClick BELONGS TO THE SMOOTHLIST, NOT THE ROW. DR 6.29: a ListItem
                      handler runs during CHILD propagation, which happens BEFORE the list
                      applies the selection - so it reads a stale index, which is exactly
                      the "one step behind" this dialog showed. The list's own onClick is
                      raised from notifyClick AFTER the selection is applied. -->
-                <SmoothList profile="SDList" id="tradeList" position="0px 0px" size="760px 492px"
+                <SmoothList profile="ARList" id="tradeList" position="0px 0px" size="760px 492px"
                             onSelectionChanged="onRowChanged" onClick="onRowClicked">
-                    <ListItem profile="SDListItemStats" name="rowTemplate" size="760px 42px">
+                    <ListItem profile="ARListItemStats" name="rowTemplate" size="760px 42px">
                         <Bitmap position="12px 9px" size="24px 24px" name="fillIcon" imageColor="1 1 1 1" />
-                        <Text profile="SDRowCell" position="48px 0px"  size="280px 42px" textSize="12px" name="tdName" />
-                        <Text profile="SDRowCell" position="336px 0px" size="110px 42px" textSize="12px" name="tdAge" />
-                        <Text profile="SDRowCell" position="454px 0px" size="140px 42px" textSize="12px" name="tdEach" />
-                        <Text profile="SDRowCell" position="602px 0px" size="140px 42px" textSize="12px" name="tdEachNet" />
+                        <Text profile="ARRowCell" position="48px 0px"  size="280px 42px" textSize="12px" name="tdName" />
+                        <Text profile="ARRowCell" position="336px 0px" size="110px 42px" textSize="12px" name="tdAge" />
+                        <Text profile="ARRowCell" position="454px 0px" size="140px 42px" textSize="12px" name="tdEach" />
+                        <Text profile="ARRowCell" position="602px 0px" size="140px 42px" textSize="12px" name="tdEachNet" />
                     </ListItem>
                 </SmoothList>
                 <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px" size="12px 492px" with="anchorTopRight">
@@ -103,9 +103,9 @@
                 </ThreePartBitmap>
             </GuiElement>
             <!-- inside a Bitmap for the same reason as the money block above -->
-            <Bitmap profile="SDList" position="40px -260px" size="760px 40px" imageColor="0 0 0 0"
+            <Bitmap profile="ARList" position="40px -260px" size="760px 40px" imageColor="0 0 0 0"
                     id="emptyBox" visible="false">
-                <Text profile="SDBarLabel" position="12px -6px" size="736px 30px" textSize="14px"
+                <Text profile="ARBarLabel" position="12px -6px" size="736px 30px" textSize="14px"
                       id="emptyNote"/>
             </Bitmap>
 
@@ -113,8 +113,8 @@
                  the only thing that changes the money, and a reader should not have to
                  look across the dialog to see the effect.
                  820 + 340 = 1160, the box's own right margin. -->
-            <Bitmap profile="SDList" position="820px -170px" size="340px 34px">
-                <Text profile="SDHeaderLeft" position="12px 0px" size="328px 34px" textSize="11px"
+            <Bitmap profile="ARList" position="820px -170px" size="340px 34px">
+                <Text profile="ARHeaderLeft" position="12px 0px" size="328px 34px" textSize="11px"
                       text="$l10n_ar_td_amount"/>
                 <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
             </Bitmap>
@@ -142,21 +142,21 @@
                  THE SEPARATOR IS fs25_lineSeparatorBottom, the profile the headers use,
                  rather than a graph_pixel bitmap placed by hand.
                  12+190=202 | 210+118=328, inside a 340px box. -->
-            <Bitmap profile="SDList" position="820px -588px" size="340px 30px" imageColor="0 0 0 0">
-                <Text profile="SDBarLabel"      position="12px 0px"  size="190px 30px" textSize="13px" id="lblGross"/>
-                <Text profile="SDBarLabelRight" position="210px 0px" size="118px 30px" textSize="13px" id="valGross"/>
+            <Bitmap profile="ARList" position="820px -588px" size="340px 30px" imageColor="0 0 0 0">
+                <Text profile="ARBarLabel"      position="12px 0px"  size="190px 30px" textSize="13px" id="lblGross"/>
+                <Text profile="ARBarLabelRight" position="210px 0px" size="118px 30px" textSize="13px" id="valGross"/>
             </Bitmap>
-            <Bitmap profile="SDList" position="820px -620px" size="340px 30px" imageColor="0 0 0 0">
-                <Text profile="SDBarLabel"      position="12px 0px"  size="190px 30px" textSize="13px" id="lblFee"/>
-                <Text profile="SDBarLabelRight" position="210px 0px" size="118px 30px" textSize="13px" id="valFee"/>
+            <Bitmap profile="ARList" position="820px -620px" size="340px 30px" imageColor="0 0 0 0">
+                <Text profile="ARBarLabel"      position="12px 0px"  size="190px 30px" textSize="13px" id="lblFee"/>
+                <Text profile="ARBarLabelRight" position="210px 0px" size="118px 30px" textSize="13px" id="valFee"/>
             </Bitmap>
-            <Bitmap profile="SDList" position="820px -660px" size="340px 40px" imageColor="0 0 0 0">
+            <Bitmap profile="ARList" position="820px -660px" size="340px 40px" imageColor="0 0 0 0">
                 <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
-                <Text profile="SDBarLabel"      position="12px 0px"  size="190px 40px" textSize="15px" id="lblTotal"/>
-                <Text profile="SDBarLabelRight" position="210px 0px" size="118px 40px" textSize="20px" id="valTotal"/>
+                <Text profile="ARBarLabel"      position="12px 0px"  size="190px 40px" textSize="15px" id="lblTotal"/>
+                <Text profile="ARBarLabelRight" position="210px 0px" size="118px 40px" textSize="20px" id="valTotal"/>
             </Bitmap>
-            <Bitmap profile="SDList" position="820px -266px" size="340px 40px" imageColor="0 0 0 0">
-                <Text profile="SDBarLabel" position="12px 0px" size="316px 40px" textSize="12px"
+            <Bitmap profile="ARList" position="820px -266px" size="340px 40px" imageColor="0 0 0 0">
+                <Text profile="ARBarLabel" position="12px 0px" size="316px 40px" textSize="12px"
                       textMaxNumLines="2" id="noteText"/>
             </Bitmap>
         </GuiElement>

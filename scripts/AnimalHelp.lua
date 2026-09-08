@@ -130,7 +130,13 @@ end
 -- nothing else about the mod changes.
 function AnimalHelp.install(SD)
     if SD == nil or SD.API == nil or SD.API.registerHelpTab == nil then
-        warn("Distribution Redux has no help tab API (needs v9+); the AR guide is not shown")
+        if SD == nil then
+            -- STANDALONE. Not a fault and not the same thing as an old DR: AR has its own
+            -- menu, and this tab simply has no DR page to attach to.
+            warn("no Distribution Redux; the guide stays on AR's own menu")
+        else
+            warn("Distribution Redux has no User Guide tab API (needs v9+); AR shows it on its own menu instead")
+        end
         return false
     end
     -- THE FUNCTION, not AnimalHelp.topics() -- DR calls it per page open.

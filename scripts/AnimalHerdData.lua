@@ -200,22 +200,134 @@ function AnimalHerdData.readBarn(p)
 end
 
 -- ---------------------------------------------------------------------------
+-- OWNERSHIP, AR'S OWN. These existed only on DR until the mod went standalone,
+-- and every one of the gates below was written to fail OPEN when DR was missing
+-- -- correct while DR was always installed, because the fallback could then only
+-- fire in a broken state. The moment DR became OPTIONAL that fallback became the
+-- PRIMARY path, and "fail open" means "no ownership filter at all": a standalone
+-- player saw every husbandry on the map, including map-owned pens they do not
+-- have. Reported in game as three chicken pastures where the farm owns one.
+--
+-- THE GENERAL SHAPE, worth remembering: a fallback written for a can't-happen
+-- case becomes the common path the day the dependency it guards turns optional.
+
+---The local player's farm, or nil when it cannot be resolved.
+--
+-- 0 IS SPECTATOR AND IS NOT A FARM (DR 5.47). It is a real number, so a `~= nil`
+-- test hands it back happily and it then matches no building at all -- which on a
+-- dedicated server silently empties the list. Callers read nil as "no preference"
+-- and show everything, which is the safe direction for a display.
+function AnimalHerdData.playerFarmId()
+    local m = g_currentMission
+    if m == nil then return nil end
+    local f
+    if m.getFarmId ~= nil then
+        local ok, r = pcall(m.getFarmId, m)
+        if ok and type(r) == "number" then f = r end
+    end
+    if f == nil and m.player ~= nil then f = m.player.farmId end
+    if f == nil and g_localPlayer ~= nil then f = g_localPlayer.farmId end
+    if f == nil then f = m.playerFarmId end
+    if type(f) ~= "number" or f == 0 then return nil end
+    return f
+end
+
+---The owner farm of a placeable, or nil. Method first, then the field.
+function AnimalHerdData.ownerFarmId(p)
+    if p == nil then return nil end
+    if p.getOwnerFarmId ~= nil then
+        local ok, f = pcall(p.getOwnerFarmId, p)
+        if ok and f ~= nil then return f end
+    end
+    return p.ownerFarmId
+end
+
+---May `farmId` use this barn?
+--
+-- DR's `_farmCanUse` additionally allows PUBLIC MAP STORAGE, which any farm may
+-- use because it is nobody's (DR 5.63) -- deliberately NOT ported, because that
+-- rule is gated on `spec_silo` and so can never fire for a husbandry. For this
+-- class of building the two are equivalent, which is what lets DR's own answer be
+-- preferred when it is there without the two ever disagreeing.
+function AnimalHerdData.farmCanUse(p, farmId)
+    if farmId == nil then return true end       -- unknown farm: fail open
+    local of = AnimalHerdData.ownerFarmId(p)
+    return of == nil or of == farmId
+end
+
+
+---Order a list by the name the player SEES, in their own language.
+--
+-- `table.sort` on strings compares BYTES, so an accented or non-Latin name sorts outside the
+-- alphabet being read -- and every barn name here comes from the player or from a translation.
+-- Distribution Redux carries a collation table for exactly this, so it is used WHEN PRESENT.
+--
+-- CAPABILITY, NOT PRESENCE, and the fallback is deliberate rather than defensive (31.3): with no
+-- DR this degrades to the byte order it has always used, which is a cosmetic difference in a
+-- list that is still sorted. That is why this borrows rather than porting DistributionSort --
+-- unlike the GUI profiles (31.2) or the panel (31.4), nothing here fails SILENTLY or looks
+-- broken without it.
+--
+-- Reached through DR_ENV, not SmartDistribution: DistributionSort is a global in DR's own
+-- environment and is not hung off that table.
+function AnimalHerdData.sortByName(list, nameOf, idOf)
+    if type(list) ~= "table" or #list < 2 then return list end
+    nameOf = nameOf or function(e) return e.name end
+    idOf   = idOf   or function(e) return e.uid end
+
+    local env = AnimalRedux ~= nil and AnimalRedux.DR_ENV or nil
+    local DS  = (type(env) == "table") and env.DistributionSort or nil
+    if DS ~= nil and DS.less ~= nil then
+        local ok = pcall(table.sort, list, function(a, b)
+            return DS.less(nameOf(a), idOf(a), nameOf(b), idOf(b))
+        end)
+        if ok then return list end
+    end
+
+    -- Byte order, with the id as a stable second key so two identically named barns cannot swap
+    -- places between rebuilds (table.sort is not stable).
+    table.sort(list, function(a, b)
+        local na, nb = tostring(nameOf(a) or ""), tostring(nameOf(b) or "")
+        if na ~= nb then return na < nb end
+        return tostring(idOf(a) or "") < tostring(idOf(b) or "")
+    end)
+    return list
+end
+
+
+-- ---------------------------------------------------------------------------
 ---Every husbandry THIS FARM manages, read and named. Moved here for the same
 -- reason readBarn was: both tabs must list the same buildings, and two copies of
 -- an enrolment rule is two chances to disagree about which barns exist.
 --
--- Both tests are DR's own, so this shows exactly the set DR manages:
---   isAssetEnrolled  participation, and the Animal Husbandry class toggle
---   _farmCanUse      ownership, including the public-map-storage rule (DR 5.63)
--- Each fails OPEN if DR does not expose it, so a version mismatch shows too much
--- rather than an empty tab.
+-- TWO DIFFERENT QUESTIONS, and only one of them may fail open:
+--   isAssetEnrolled  participation, and DR's Animal Husbandry class toggle. A DR
+--                    SETTING, so with no DR there is nothing to be excluded by and
+--                    true is the right answer. Fails open, correctly.
+--   ownership        NOT DR's question. AR now answers it itself when DR is absent
+--                    (see farmCanUse above) instead of skipping the test, which is
+--                    what listed every map-owned pen on a standalone install.
+-- DR's answer is PREFERRED when DR is there, so both mods installed shows exactly
+-- the set DR manages and the two can never drift; the two agree for husbandries in
+-- any case, since DR's extra map-storage branch needs a spec_silo.
 function AnimalHerdData.enumerate()
     local barns = {}
     local ps = g_currentMission ~= nil and g_currentMission.placeableSystem or nil
     if ps == nil then return barns end
 
     local SD = AnimalRedux ~= nil and AnimalRedux.DR or nil
-    local myFarm = (SD ~= nil and SD._playerFarmId ~= nil) and SD._playerFarmId() or nil
+
+    -- IF/ELSE, NOT `a and b or c`, on both of these. DR's _farmCanUse legitimately
+    -- returns FALSE for a building this farm does not own, and the collapsing form
+    -- would then fall through to AR's own test and ask the question twice -- the
+    -- trap this pair of codebases has been bitten by more than once (DR 5.44 /
+    -- 5.46c), and here it would silently restore the very bug being fixed.
+    local myFarm
+    if SD ~= nil and SD._playerFarmId ~= nil then
+        myFarm = SD._playerFarmId()
+    else
+        myFarm = AnimalHerdData.playerFarmId()
+    end
 
     -- ONE ROW PER PLACEABLE. Guarding on identity rather than trusting the list:
     -- a building appearing twice would be a counting fault, and showing it twice
@@ -224,8 +336,12 @@ function AnimalHerdData.enumerate()
     for _, p in ipairs(ps.placeables) do
         if p.spec_husbandryFood ~= nil and seen[p] == nil then
             local enrolled = SD == nil or SD.isAssetEnrolled == nil or SD.isAssetEnrolled(p)
-            local usable   = myFarm == nil or SD == nil or SD._farmCanUse == nil
-                             or SD._farmCanUse(p, myFarm)
+            local usable
+            if SD ~= nil and SD._farmCanUse ~= nil then
+                usable = SD._farmCanUse(p, myFarm)
+            else
+                usable = AnimalHerdData.farmCanUse(p, myFarm)
+            end
             if enrolled and usable then
                 seen[p] = true
                 local b = AnimalHerdData.readBarn(p)
@@ -250,7 +366,7 @@ function AnimalHerdData.enumerate()
         end
     end
 
-    table.sort(barns, function(a, b) return a.name < b.name end)
+    AnimalHerdData.sortByName(barns)
     return barns
 end
 
@@ -421,4 +537,64 @@ function AnimalHerdData.ratePerAnimal(subType, ageMonths, key, allowed)
         if r.key == key then return r.perDay, r.fillType end
     end
     return nil, nil
+end
+
+
+---How much of `ft` this husbandry is holding. THE STANDALONE ANSWER; DR's assetHeld is preferred
+-- wherever it is available (see HerdInspectorPage:buildProductionRows).
+--
+-- WHY THIS IS AN APPROXIMATION AND SAYS SO. DR's assetHeld is exact because DR does the bookkeeping:
+-- for a pallet-spawning pen it folds the pad and the pending queue into one figure (DR 5.21), and
+-- while DR is running it OWNS spec_husbandryPallets.fillLevels and writes the full stock there
+-- (DR 5.32) rather than vanilla's litres-on-pallets. Reading the specs from outside can reach the
+-- same numbers but cannot reproduce that ownership, so the two may differ slightly for a pallet
+-- output while DR is installed -- which is exactly why DR's figure wins when it exists.
+--
+-- THREE SOURCES, IN THE ORDER A PRODUCT CAN LIVE IN THEM:
+--   * husbandryFood  -- per fill type since DR 5.68 established fillLevels is keyed BY TYPE and not
+--                       a barn total. Feed rather than output, but the caller does not know that.
+--   * husbandryPallets -- fillLevels (what is on pallets) PLUS pendingLiters (the internal queue a
+--                       pen fills before releasing a whole pallet). Both, because a pen's stock is
+--                       pad + queue and reporting either alone reads as half the product vanishing.
+--   * the placeable's own storages -- milk and slurry, which are Storage-backed and in neither spec.
+--
+-- Returns nil, never 0, when nothing can answer: the column then shows blank rather than asserting
+-- that a barn holds nothing, which is a different and much stronger claim.
+function AnimalHerdData.heldOf(placeable, ft)
+    if placeable == nil or ft == nil then return nil end
+    local total, found = 0, false
+
+    local fs = placeable.spec_husbandryFood
+    if fs ~= nil and type(fs.fillLevels) == "table" and fs.fillLevels[ft] ~= nil then
+        total = total + (fs.fillLevels[ft] or 0); found = true
+    end
+
+    local ps = placeable.spec_husbandryPallets
+    if ps ~= nil then
+        if type(ps.fillLevels) == "table" and ps.fillLevels[ft] ~= nil then
+            total = total + (ps.fillLevels[ft] or 0); found = true
+        end
+        if type(ps.pendingLiters) == "table" and ps.pendingLiters[ft] ~= nil then
+            total = total + (ps.pendingLiters[ft] or 0); found = true
+        end
+    end
+
+    -- Storage-backed outputs (milk, liquid manure). getAllStorages is DR's helper and we have no
+    -- equivalent, so read the specs that actually carry a storage and dedupe on identity: the same
+    -- Storage object is reachable from more than one spec, and summing it twice would double the
+    -- figure (DR 5.77 records exactly that on a pass-through store).
+    local seen = {}
+    for _, key in ipairs({ "spec_husbandryMilk", "spec_husbandryLiquidManure", "spec_silo" }) do
+        local spec = placeable[key]
+        local list = spec ~= nil and (spec.storages or (spec.storage ~= nil and { spec.storage } or nil)) or nil
+        for _, st in ipairs(list or {}) do
+            if st ~= nil and not seen[st] and type(st.fillLevels) == "table" and st.fillLevels[ft] ~= nil then
+                seen[st] = true
+                total = total + (st.fillLevels[ft] or 0); found = true
+            end
+        end
+    end
+
+    if not found then return nil end
+    return total
 end

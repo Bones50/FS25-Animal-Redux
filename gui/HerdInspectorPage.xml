@@ -71,7 +71,7 @@
              children draw in order and the label must sit ON it (DR 5.86).
              These are the BASE GAME'S OWN tab profiles; unselected draws nothing, so
              only the active tab shows a background. -->
-        <Bitmap profile="SDList" position="0px 0px" size="1480px 40px">
+        <Bitmap profile="ARList" position="0px 0px" size="1480px 40px">
             <ThreePartBitmap profile="fs25_subCategorySelectorTabbedTabBg"
                              position="16px 0px" size="146px 40px" name="arTabBg1" id="arTabBg1"/>
             <Button profile="fs25_subCategorySelectorTabbedTab" position="16px 0px" size="146px 40px" textAutoWidth="false"
@@ -96,7 +96,7 @@
              reason): one legend for the whole page beats eight headers that have to be
              re-tiled every time the period changes.
              16 + 300 = 316 | 330 + 300 = 630 -->
-        <Bitmap profile="SDList" position="0px -46px" size="1480px 40px">
+        <Bitmap profile="ARList" position="0px -46px" size="1480px 40px">
             <Bitmap profile="fs25_multiTextOptionContainer" position="16px 0px" size="300px 40px"
                     imageColor="0 0 0 0">
                 <MultiTextOption profile="fs25_settingsMultiTextOption" id="periodOption"
@@ -130,48 +130,48 @@
              | 620+80=700 | 708+140=848 | 856+120=976 | 984+120=1104
              | 1112+140=1252 | 1260+204=1464, and 1464 + 16 = 1480.
              ============================================================ -->
-        <Bitmap profile="SDList" id="groupHeaderRow" position="0px -92px" size="1480px 40px"
+        <Bitmap profile="ARList" id="groupHeaderRow" position="0px -92px" size="1480px 40px"
                 visible="false">
-            <Text profile="SDHeaderLeft" position="48px 0px" size="170px 40px" textSize="11px"
+            <Text profile="ARHeaderLeft" position="48px 0px" size="170px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_animal"/>
-            <Text profile="SDHeaderLeft" position="226px 0px" size="230px 40px" textSize="11px"
+            <Text profile="ARHeaderLeft" position="226px 0px" size="230px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_barn"/>
-            <Text profile="SDHeaderRight" position="464px 0px" size="70px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="464px 0px" size="70px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_count"/>
-            <Text profile="SDHeaderRight" position="542px 0px" size="70px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="542px 0px" size="70px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_age"/>
-            <Text profile="SDHeaderRight" position="620px 0px" size="80px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="620px 0px" size="80px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_health"/>
-            <Text profile="SDHeaderLeft" position="708px 0px" size="140px 40px" textSize="11px"
+            <Text profile="ARHeaderLeft" position="708px 0px" size="140px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_repro"/>
-            <Text profile="SDHeaderRight" position="856px 0px" size="120px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="856px 0px" size="120px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_each"/>
-            <Text profile="SDHeaderRight" position="984px 0px" size="120px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="984px 0px" size="120px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_change"/>
-            <Text profile="SDHeaderRight" position="1112px 0px" size="140px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="1112px 0px" size="140px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_total"/>
             <!-- NAMED AND ID'd so the Herd Adviser setting can hide it. It is the
                  LAST column, so hiding it leaves no gap and nothing has to re-tile:
                  the table simply ends at 1260 instead of 1464. -->
-            <Text profile="SDHeaderLeft" position="1260px 0px" size="204px 40px" textSize="11px"
+            <Text profile="ARHeaderLeft" position="1260px 0px" size="204px 40px" textSize="11px"
                   name="ghRec" id="ghRec" text="$l10n_ar_hi_col_rec"/>
         <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
         </Bitmap>
-        <GuiElement profile="SDList" id="groupListBox" position="0px -136px" size="1480px 674px" visible="false">
-            <SmoothList profile="SDList" id="groupList" onClick="onListClick" onSelectionChanged="onListSelectionChanged" focusChangeTop="nil" focusChangeBottom="nil"
+        <GuiElement profile="ARList" id="groupListBox" position="0px -136px" size="1480px 674px" visible="false">
+            <SmoothList profile="ARList" id="groupList" onClick="onListClick" onSelectionChanged="onListSelectionChanged" focusChangeTop="nil" focusChangeBottom="nil"
                         position="0px 0px" size="1480px 674px">
-                <ListItem profile="SDListItemStats" name="rowTemplate" size="1480px 42px">
+                <ListItem profile="ARListItemStats" name="rowTemplate" size="1480px 42px">
                     <Bitmap name="fillIcon" position="16px 9px" size="24px 24px" visible="false"/>
-                    <Text profile="SDRowCell" position="48px 0px" size="170px 42px" textSize="12px" name="giAnimal"/>
-                    <Text profile="SDRowCell" position="226px 0px" size="230px 42px" textSize="12px" name="giBarn"/>
-                    <Text profile="SDRowCellR" position="464px 0px" size="70px 42px" textSize="12px" name="giCount"/>
-                    <Text profile="SDRowCellR" position="542px 0px" size="70px 42px" textSize="12px" name="giAge"/>
-                    <Text profile="SDRowCellR" position="620px 0px" size="80px 42px" textSize="12px" name="giHealth"/>
-                    <Text profile="SDRowCell" position="708px 0px" size="140px 42px" textSize="12px" name="giRepro"/>
-                    <Text profile="SDRowCellR" position="856px 0px" size="120px 42px" textSize="12px" name="giEach"/>
-                    <Text profile="SDRowCellR" position="984px 0px" size="120px 42px" textSize="12px" name="giChange"/>
-                    <Text profile="SDRowCellR" position="1112px 0px" size="140px 42px" textSize="12px" name="giTotal"/>
-                    <Text profile="SDRowCell" position="1260px 0px" size="204px 42px" textSize="12px" name="giRec"/>
+                    <Text profile="ARRowCell" position="48px 0px" size="170px 42px" textSize="12px" name="giAnimal"/>
+                    <Text profile="ARRowCell" position="226px 0px" size="230px 42px" textSize="12px" name="giBarn"/>
+                    <Text profile="ARRowCellR" position="464px 0px" size="70px 42px" textSize="12px" name="giCount"/>
+                    <Text profile="ARRowCellR" position="542px 0px" size="70px 42px" textSize="12px" name="giAge"/>
+                    <Text profile="ARRowCellR" position="620px 0px" size="80px 42px" textSize="12px" name="giHealth"/>
+                    <Text profile="ARRowCell" position="708px 0px" size="140px 42px" textSize="12px" name="giRepro"/>
+                    <Text profile="ARRowCellR" position="856px 0px" size="120px 42px" textSize="12px" name="giEach"/>
+                    <Text profile="ARRowCellR" position="984px 0px" size="120px 42px" textSize="12px" name="giChange"/>
+                    <Text profile="ARRowCellR" position="1112px 0px" size="140px 42px" textSize="12px" name="giTotal"/>
+                    <Text profile="ARRowCell" position="1260px 0px" size="204px 42px" textSize="12px" name="giRec"/>
                 </ListItem>
                 </SmoothList>
             <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"
@@ -208,18 +208,18 @@
              the right edge of every list (20.31). It was 129 wide, ending at 179 in
              a 185px list, which the 12px slider would have been drawn straight on
              top of - the one column on the page with no room to spare. -->
-        <Bitmap profile="SDList" id="barnHeaderRow" position="0px -92px" size="185px 40px"
+        <Bitmap profile="ARList" id="barnHeaderRow" position="0px -92px" size="185px 40px"
                 visible="false">
-            <Text profile="SDHeaderLeft"  position="16px 0px"  size="155px 40px" textSize="11px"
+            <Text profile="ARHeaderLeft"  position="16px 0px"  size="155px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_barn"/>
             <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
         </Bitmap>
-        <GuiElement profile="SDList" id="barnListBox" position="0px -136px" size="185px 674px" visible="false">
-            <SmoothList profile="SDList" id="barnList" onSelectionChanged="onListSelectionChanged" focusChangeTop="nil" focusChangeBottom="nil"
+        <GuiElement profile="ARList" id="barnListBox" position="0px -136px" size="185px 674px" visible="false">
+            <SmoothList profile="ARList" id="barnList" onSelectionChanged="onListSelectionChanged" focusChangeTop="nil" focusChangeBottom="nil"
                         position="0px 0px" size="185px 674px">
-                <ListItem profile="SDListItem" name="rowTemplate" size="185px 52px">
+                <ListItem profile="ARListItem" name="rowTemplate" size="185px 52px">
                     <Bitmap position="8px 11px" size="36px 30px" name="assetIcon" imageColor="1 1 1 1"/>
-                    <Text profile="SDRowCell" position="50px 0px" size="115px 52px" textSize="14px"
+                    <Text profile="ARRowCell" position="50px 0px" size="115px 52px" textSize="14px"
                           textMaxNumLines="2" name="blName"/>
                 </ListItem>
                 </SmoothList>
@@ -239,17 +239,17 @@
              This is the SAME panel the Animal Husbandry tab shows, drawn by the
              same function from the same API v4 provider, so the two cannot
              drift into being two views of one set of figures. -->
-        <Bitmap profile="SDList" position="205px -92px" size="1275px 40px" id="panelHeader" name="panelHeader" visible="false">
-            <Text profile="SDHeaderLeft" position="16px 0px" size="700px 40px" textSize="11px"
+        <Bitmap profile="ARList" position="205px -92px" size="1275px 40px" id="panelHeader" name="panelHeader" visible="false">
+            <Text profile="ARHeaderLeft" position="16px 0px" size="700px 40px" textSize="11px"
                   text="$l10n_ar_hi_panelTitle" />
             <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px" />
         </Bitmap>
 
-        <GuiElement profile="SDList" position="205px -136px" size="1275px 146px" id="animalPanel" name="animalPanel" visible="false">
+        <GuiElement profile="ARList" position="205px -136px" size="1275px 146px" id="animalPanel" name="animalPanel" visible="false">
 
             <!--  - block A: ANIMALS  - -->
-            <Text profile="SDBarLabel" position="16px 128px"  size="234px 14px" textSize="11px" name="apHerdLabel" />
-            <Text profile="SDBarLabel" position="16px 96px" size="118px 30px" textSize="24px" name="apCount" />
+            <Text profile="ARBarLabel" position="16px 128px"  size="234px 14px" textSize="11px" name="apHerdLabel" />
+            <Text profile="ARBarLabel" position="16px 96px" size="118px 30px" textSize="24px" name="apCount" />
             <!-- BESIDE THE COUNT, because that is the number it is about: whether to
                  sell to make room for births. 11.11 measured what a full pen costs -
                  it destroys numAnimals offspring AND the gestation that made them,
@@ -257,12 +257,12 @@
                  108px at 11px is about 19 characters, so it wraps to two lines; the
                  provider writes to a 36-character budget.
                  16+118=134 | 142+108=250, the block's own right edge. -->
-            <Text profile="SDBarLabel" position="142px 96px" size="108px 30px" textSize="11px" textMaxNumLines="2" name="apHerdAdvice" />
+            <Text profile="ARBarLabel" position="142px 96px" size="108px 30px" textSize="11px" textMaxNumLines="2" name="apHerdAdvice" />
             <Bitmap position="16px 84px" size="230px 8px" name="apCapBg"
                     imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.13 0.14 0.16 0.85" />
             <Bitmap position="16px 84px" size="230px 8px" name="apCapFill"
                     imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.42 0.45 0.50 1" />
-            <Text profile="SDBarLabel" position="16px 64px" size="234px 14px" textSize="11px" name="apHealthLabel" />
+            <Text profile="ARBarLabel" position="16px 64px" size="234px 14px" textSize="11px" name="apHealthLabel" />
             <Bitmap position="16px 46px" size="230px 16px" name="apHealthBg"
                     imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.13 0.14 0.16 0.85" />
             <Bitmap position="16px 46px" size="230px 16px" name="apHealthFill"
@@ -275,7 +275,7 @@
                  and the same status bands as HEALTH above it. The base game HIDES
                  it for horses and pigs, so the provider flags that and it reads
                  "n/a" rather than a confident zero. -->
-            <Text profile="SDBarLabel" position="16px 26px" size="234px 14px" textSize="11px" name="apProdLabel" />
+            <Text profile="ARBarLabel" position="16px 26px" size="234px 14px" textSize="11px" name="apProdLabel" />
             <Bitmap position="16px 8px" size="230px 16px" name="apProdBg"
                     imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.13 0.14 0.16 0.85" />
             <Bitmap position="16px 8px" size="230px 16px" name="apProdFill"
@@ -286,14 +286,14 @@
                  cannot disagree about which tier is short. 480px at 11px is about
                  80 characters, which is why this one needs no wrapping.
                  286+480=766, level with the feed block above it. -->
-            <Text profile="SDBarLabel" position="374px 10px" size="480px 16px" textSize="11px" name="apFeedAdvice" />
+            <Text profile="ARBarLabel" position="374px 10px" size="480px 16px" textSize="11px" name="apFeedAdvice" />
 
             <Bitmap position="312px 8px" size="1px 134px" name="apSep1"
                     imageFilename="dataS/menu/base/graph_pixel.png" imageColor="1 1 1 0.16" />
 
             <!--  - block B: FEED  - -->
-            <Text profile="SDBarLabel" position="374px 126px"  size="480px 14px" textSize="11px" name="apFeedLabel" />
-            <Text profile="SDBarLabel" position="374px 106px" size="480px 18px" textSize="13px" name="apFeedTitle" />
+            <Text profile="ARBarLabel" position="374px 126px"  size="480px 14px" textSize="11px" name="apFeedLabel" />
+            <Text profile="ARBarLabel" position="374px 106px" size="480px 18px" textSize="13px" name="apFeedTitle" />
             <Bitmap position="374px 80px" size="470px 22px" name="apFeedBg"
                     imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.13 0.14 0.16 0.85">
                 <Bitmap position="0px 0px" size="0px 22px" name="apSeg1" imageFilename="dataS/menu/base/graph_pixel.png" />
@@ -311,30 +311,30 @@
             </Bitmap>
 
             <Bitmap position="374px 58px" size="12px 12px" name="apLegSw1" imageFilename="dataS/menu/base/graph_pixel.png" />
-            <Text profile="SDBarLabel" position="392px 56px" size="140px 16px" textSize="11px" name="apLegTx1" />
+            <Text profile="ARBarLabel" position="392px 56px" size="140px 16px" textSize="11px" name="apLegTx1" />
             <Bitmap position="534px 58px" size="12px 12px" name="apLegSw2" imageFilename="dataS/menu/base/graph_pixel.png" />
-            <Text profile="SDBarLabel" position="552px 56px" size="140px 16px" textSize="11px" name="apLegTx2" />
+            <Text profile="ARBarLabel" position="552px 56px" size="140px 16px" textSize="11px" name="apLegTx2" />
             <Bitmap position="694px 58px" size="12px 12px" name="apLegSw3" imageFilename="dataS/menu/base/graph_pixel.png" />
-            <Text profile="SDBarLabel" position="712px 56px" size="140px 16px" textSize="11px" name="apLegTx3" />
+            <Text profile="ARBarLabel" position="712px 56px" size="140px 16px" textSize="11px" name="apLegTx3" />
             <Bitmap position="374px 34px" size="12px 12px" name="apLegSw4" imageFilename="dataS/menu/base/graph_pixel.png" />
-            <Text profile="SDBarLabel" position="392px 32px" size="140px 16px" textSize="11px" name="apLegTx4" />
+            <Text profile="ARBarLabel" position="392px 32px" size="140px 16px" textSize="11px" name="apLegTx4" />
             <Bitmap position="534px 34px" size="12px 12px" name="apLegSw5" imageFilename="dataS/menu/base/graph_pixel.png" />
-            <Text profile="SDBarLabel" position="552px 32px" size="140px 16px" textSize="11px" name="apLegTx5" />
+            <Text profile="ARBarLabel" position="552px 32px" size="140px 16px" textSize="11px" name="apLegTx5" />
             <Bitmap position="694px 34px" size="12px 12px" name="apLegSw6" imageFilename="dataS/menu/base/graph_pixel.png" />
-            <Text profile="SDBarLabel" position="712px 32px" size="140px 16px" textSize="11px" name="apLegTx6" />
+            <Text profile="ARBarLabel" position="712px 32px" size="140px 16px" textSize="11px" name="apLegTx6" />
 
             <Bitmap position="916px 8px" size="1px 134px" name="apSep2"
                     imageFilename="dataS/menu/base/graph_pixel.png" imageColor="1 1 1 0.16" />
 
             <!--  - block C: HERD VALUE  - -->
-            <Text profile="SDBarLabel" position="978px 128px" size="280px 14px" textSize="11px" name="apValueLabel" />
-            <Text profile="SDBarLabel" position="978px 104px" size="280px 22px" textSize="16px" name="apValueMain" />
+            <Text profile="ARBarLabel" position="978px 128px" size="280px 14px" textSize="11px" name="apValueLabel" />
+            <Text profile="ARBarLabel" position="978px 104px" size="280px 22px" textSize="16px" name="apValueMain" />
             <Bitmap position="978px 82px" size="280px 20px" name="apValueBg"
                     imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.13 0.14 0.16 0.85" />
             <Bitmap position="978px 82px" size="280px 20px" name="apValueFill"
                     imageFilename="dataS/menu/base/graph_pixel.png" imageColor="0.10 0.62 0.44 1" />
-            <Text profile="SDBarLabel" position="978px 66px" size="280px 14px" textSize="11px" name="apValueOf" />
-            <Text profile="SDBarLabel" position="978px 50px" size="280px 14px" textSize="11px" name="apValueNote" />
+            <Text profile="ARBarLabel" position="978px 66px" size="280px 14px" textSize="11px" name="apValueOf" />
+            <Text profile="ARBarLabel" position="978px 50px" size="280px 14px" textSize="11px" name="apValueNote" />
 
             <!--  - block D: PROFIT  -
                  THE BREAKDOWN SITS DIRECTLY ABOVE THE HEADLINE IT EXPLAINS. It first went in the
@@ -353,12 +353,12 @@
                  measurement of anything that has happened. 190px at 11px is about
                  34 characters and the longest string is 27.
                  794 + 190 = 984 | 984 + 90 = 1074, level with the column above. -->
-            <Text profile="SDBarLabel" position="978px 32px" size="190px 16px" textSize="11px" name="apProfitLabel" />
-            <Text profile="SDBarLabel" position="1168px 32px" size="90px 16px"  textSize="13px" name="apProfitMain" />
-            <Text profile="SDBarLabel" position="978px 17px" size="140px 14px" textSize="11px" name="apProfitP1" />
-            <Text profile="SDBarLabel" position="1118px 17px" size="140px 14px" textSize="11px" name="apProfitP2" />
-            <Text profile="SDBarLabel" position="978px 2px"  size="140px 14px" textSize="11px" name="apProfitP3" />
-            <Text profile="SDBarLabel" position="1118px 2px"  size="140px 14px" textSize="11px" name="apProfitP4" />
+            <Text profile="ARBarLabel" position="978px 32px" size="190px 16px" textSize="11px" name="apProfitLabel" />
+            <Text profile="ARBarLabel" position="1168px 32px" size="90px 16px"  textSize="13px" name="apProfitMain" />
+            <Text profile="ARBarLabel" position="978px 17px" size="140px 14px" textSize="11px" name="apProfitP1" />
+            <Text profile="ARBarLabel" position="1118px 17px" size="140px 14px" textSize="11px" name="apProfitP2" />
+            <Text profile="ARBarLabel" position="978px 2px"  size="140px 14px" textSize="11px" name="apProfitP3" />
+            <Text profile="ARBarLabel" position="1118px 2px"  size="140px 14px" textSize="11px" name="apProfitP4" />
         </GuiElement>
 
         <!-- upper left: the groups in this barn. 680 wide now rather than 540 -
@@ -377,38 +377,38 @@
              proved for stepping a ring in a row. Purpose IS a ring of three
              (producer, breeder, unset), which is exactly what a pair of arrows is
              for and what a two state switch could not express. -->
-        <Bitmap profile="SDList" id="breedHeaderRow" position="205px -92px" size="1275px 40px"
+        <Bitmap profile="ARList" id="breedHeaderRow" position="205px -92px" size="1275px 40px"
                 visible="false">
-            <Text profile="SDHeaderLeft"  position="48px 0px"   size="200px 40px" textSize="11px" text="$l10n_ar_hi_col_breed"/>
-            <Text profile="SDHeaderRight" position="256px 0px"  size="70px 40px"  textSize="11px" text="$l10n_ar_hi_col_count"/>
-            <Text profile="SDHeaderLeft"  position="334px 0px"  size="190px 40px" textSize="11px" text="$l10n_ar_hi_col_keptFor"/>
-            <Text profile="SDHeaderLeft"  position="532px 0px"  size="240px 40px" textSize="11px" text="$l10n_ar_hi_col_advice"/>
-            <Text profile="SDHeaderRight" position="780px 0px"  size="100px 40px" textSize="11px" text="$l10n_ar_hi_col_output"/>
-            <Text profile="SDHeaderRight" position="888px 0px"  size="110px 40px" textSize="11px" text="$l10n_ar_hi_col_asProducer"/>
-            <Text profile="SDHeaderRight" position="1006px 0px" size="110px 40px" textSize="11px" text="$l10n_ar_hi_col_asBreeder"/>
-            <Text profile="SDHeaderLeft"  position="1124px 0px" size="139px 40px" textSize="11px" text="$l10n_ar_hi_col_whereFrom"/>
+            <Text profile="ARHeaderLeft"  position="48px 0px"   size="200px 40px" textSize="11px" text="$l10n_ar_hi_col_breed"/>
+            <Text profile="ARHeaderRight" position="256px 0px"  size="70px 40px"  textSize="11px" text="$l10n_ar_hi_col_count"/>
+            <Text profile="ARHeaderLeft"  position="334px 0px"  size="190px 40px" textSize="11px" text="$l10n_ar_hi_col_keptFor"/>
+            <Text profile="ARHeaderLeft"  position="532px 0px"  size="240px 40px" textSize="11px" text="$l10n_ar_hi_col_advice"/>
+            <Text profile="ARHeaderRight" position="780px 0px"  size="100px 40px" textSize="11px" text="$l10n_ar_hi_col_output"/>
+            <Text profile="ARHeaderRight" position="888px 0px"  size="110px 40px" textSize="11px" text="$l10n_ar_hi_col_asProducer"/>
+            <Text profile="ARHeaderRight" position="1006px 0px" size="110px 40px" textSize="11px" text="$l10n_ar_hi_col_asBreeder"/>
+            <Text profile="ARHeaderLeft"  position="1124px 0px" size="139px 40px" textSize="11px" text="$l10n_ar_hi_col_whereFrom"/>
             <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
         </Bitmap>
-        <GuiElement profile="SDList" id="breedListBox" position="205px -136px" size="1275px 674px" visible="false">
-            <SmoothList profile="SDList" id="breedList" onClick="onBreedClick"
+        <GuiElement profile="ARList" id="breedListBox" position="205px -136px" size="1275px 674px" visible="false">
+            <SmoothList profile="ARList" id="breedList" onClick="onBreedClick"
                         onSelectionChanged="onListSelectionChanged"
                         focusChangeTop="nil" focusChangeBottom="nil"
                         position="0px 0px" size="1275px 674px">
-                <ListItem profile="SDListItemStats" name="breedRow" size="1275px 42px">
+                <ListItem profile="ARListItemStats" name="breedRow" size="1275px 42px">
                     <Bitmap name="brIcon" position="12px 9px" size="24px 24px" visible="false"/>
-                    <Text profile="SDRowCell"  position="48px 0px"   size="200px 42px" textSize="12px" name="brName"/>
-                    <Text profile="SDRowCellR" position="256px 0px"  size="70px 42px"  textSize="12px" name="brCount"/>
+                    <Text profile="ARRowCell"  position="48px 0px"   size="200px 42px" textSize="12px" name="brName"/>
+                    <Text profile="ARRowCellR" position="256px 0px"  size="70px 42px"  textSize="12px" name="brCount"/>
                     <!-- the label sits between the arrows, and the arrows are
                          declared AFTER it so they take the mouse first (children are
                          visited in reverse) and draw over it if they overlap. -->
-                    <Text profile="SDRowCell"  position="378px 0px"  size="96px 42px"  textSize="12px" name="brPurpose"/>
+                    <Text profile="ARRowCell"  position="378px 0px"  size="96px 42px"  textSize="12px" name="brPurpose"/>
                     <Button profile="fs25_multiTextOptionLeft" position="334px 0px" name="brPrev" onClick="onBreedPrev"/>
                     <Button profile="ARRowArrowRight"          position="478px 0px" name="brNext" onClick="onBreedNext"/>
-                    <Text profile="SDRowCell"  position="532px 0px"  size="240px 42px" textSize="12px" name="brAdvice"/>
-                    <Text profile="SDRowCellR" position="780px 0px"  size="100px 42px" textSize="12px" name="brEarns"/>
-                    <Text profile="SDRowCellR" position="888px 0px"  size="110px 42px" textSize="12px" name="brKeeps"/>
-                    <Text profile="SDRowCellR" position="1006px 0px" size="110px 42px" textSize="12px" name="brCalf"/>
-                    <Text profile="SDRowCell"  position="1124px 0px" size="139px 42px" textSize="12px" name="brTerms"/>
+                    <Text profile="ARRowCell"  position="532px 0px"  size="240px 42px" textSize="12px" name="brAdvice"/>
+                    <Text profile="ARRowCellR" position="780px 0px"  size="100px 42px" textSize="12px" name="brEarns"/>
+                    <Text profile="ARRowCellR" position="888px 0px"  size="110px 42px" textSize="12px" name="brKeeps"/>
+                    <Text profile="ARRowCellR" position="1006px 0px" size="110px 42px" textSize="12px" name="brCalf"/>
+                    <Text profile="ARRowCell"  position="1124px 0px" size="139px 42px" textSize="12px" name="brTerms"/>
                 </ListItem>
             </SmoothList>
             <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"
@@ -418,36 +418,36 @@
             </ThreePartBitmap>
         </GuiElement>
 
-        <Bitmap profile="SDList" id="bgHeaderRow" position="205px -286px" size="680px 40px"
+        <Bitmap profile="ARList" id="bgHeaderRow" position="205px -286px" size="680px 40px"
                 visible="false">
-            <Text profile="SDHeaderLeft" position="48px 0px" size="128px 40px" textSize="11px"
+            <Text profile="ARHeaderLeft" position="48px 0px" size="128px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_animal"/>
-            <Text profile="SDHeaderRight" position="184px 0px" size="42px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="184px 0px" size="42px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_count"/>
-            <Text profile="SDHeaderRight" position="234px 0px" size="46px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="234px 0px" size="46px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_age"/>
-            <Text profile="SDHeaderRight" position="288px 0px" size="62px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="288px 0px" size="62px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_health"/>
-            <Text profile="SDHeaderLeft" position="358px 0px" size="118px 40px" textSize="11px"
+            <Text profile="ARHeaderLeft" position="358px 0px" size="118px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_repro"/>
-            <Text profile="SDHeaderRight" position="484px 0px" size="76px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="484px 0px" size="76px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_change"/>
-            <Text profile="SDHeaderRight" position="568px 0px" size="96px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="568px 0px" size="96px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_groupValue"/>
         <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
         </Bitmap>
-        <GuiElement profile="SDList" id="barnGroupListBox" position="205px -330px" size="680px 480px" visible="false">
-            <SmoothList profile="SDList" id="barnGroupList" focusChangeTop="nil" focusChangeBottom="nil"
+        <GuiElement profile="ARList" id="barnGroupListBox" position="205px -330px" size="680px 480px" visible="false">
+            <SmoothList profile="ARList" id="barnGroupList" focusChangeTop="nil" focusChangeBottom="nil"
                         position="0px 0px" size="680px 480px">
-                <ListItem profile="SDListItemStats" name="rowTemplate" size="680px 42px">
+                <ListItem profile="ARListItemStats" name="rowTemplate" size="680px 42px">
                     <Bitmap name="fillIcon" position="16px 9px" size="24px 24px" visible="false"/>
-                    <Text profile="SDRowCell" position="48px 0px" size="128px 42px" textSize="12px" name="giAnimal"/>
-                    <Text profile="SDRowCellR" position="184px 0px" size="42px 42px" textSize="12px" name="giCount"/>
-                    <Text profile="SDRowCellR" position="234px 0px" size="46px 42px" textSize="12px" name="giAge"/>
-                    <Text profile="SDRowCellR" position="288px 0px" size="62px 42px" textSize="12px" name="giHealth"/>
-                    <Text profile="SDRowCell" position="358px 0px" size="118px 42px" textSize="12px" name="giRepro"/>
-                    <Text profile="SDRowCellR" position="484px 0px" size="76px 42px" textSize="12px" name="giChange"/>
-                    <Text profile="SDRowCellR" position="568px 0px" size="96px 42px" textSize="12px" name="giTotal"/>
+                    <Text profile="ARRowCell" position="48px 0px" size="128px 42px" textSize="12px" name="giAnimal"/>
+                    <Text profile="ARRowCellR" position="184px 0px" size="42px 42px" textSize="12px" name="giCount"/>
+                    <Text profile="ARRowCellR" position="234px 0px" size="46px 42px" textSize="12px" name="giAge"/>
+                    <Text profile="ARRowCellR" position="288px 0px" size="62px 42px" textSize="12px" name="giHealth"/>
+                    <Text profile="ARRowCell" position="358px 0px" size="118px 42px" textSize="12px" name="giRepro"/>
+                    <Text profile="ARRowCellR" position="484px 0px" size="76px 42px" textSize="12px" name="giChange"/>
+                    <Text profile="ARRowCellR" position="568px 0px" size="96px 42px" textSize="12px" name="giTotal"/>
                 </ListItem>
                 </SmoothList>
             <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"
@@ -473,33 +473,33 @@
              they moved left, so this runs the full height - and the spare rows are
              deliberately HERE rather than on the other two, because a modded barn
              can declare many food types while its groups and its outputs cannot. -->
-        <Bitmap profile="SDList" id="inputHeaderRow" position="893px -286px" size="587px 40px"
+        <Bitmap profile="ARList" id="inputHeaderRow" position="893px -286px" size="587px 40px"
                 visible="false">
-            <Text profile="SDHeaderLeft" position="48px 0px" size="120px 40px" textSize="11px"
+            <Text profile="ARHeaderLeft" position="48px 0px" size="120px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_product"/>
-            <Text profile="SDHeaderLeft" position="176px 0px" size="96px 40px" textSize="11px"
+            <Text profile="ARHeaderLeft" position="176px 0px" size="96px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_foodGroup"/>
-            <Text profile="SDHeaderRight" position="280px 0px" size="70px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="280px 0px" size="70px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_held"/>
-            <Text profile="SDHeaderRight" position="358px 0px" size="58px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="358px 0px" size="58px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_needs"/>
-            <Text profile="SDHeaderRight" position="424px 0px" size="70px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="424px 0px" size="70px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_costPerH"/>
-            <Text profile="SDHeaderRight" position="502px 0px" size="69px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="502px 0px" size="69px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_costNow"/>
         <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
         </Bitmap>
-        <GuiElement profile="SDList" id="inputListBox" position="893px -330px" size="587px 260px" visible="false">
-            <SmoothList profile="SDList" id="inputList" focusChangeTop="nil" focusChangeBottom="nil"
+        <GuiElement profile="ARList" id="inputListBox" position="893px -330px" size="587px 260px" visible="false">
+            <SmoothList profile="ARList" id="inputList" focusChangeTop="nil" focusChangeBottom="nil"
                         position="0px 0px" size="587px 260px">
-                <ListItem profile="SDListItemStats" name="rowTemplate" size="587px 42px">
+                <ListItem profile="ARListItemStats" name="rowTemplate" size="587px 42px">
                     <Bitmap name="fillIcon" position="16px 9px" size="24px 24px" visible="false"/>
-                    <Text profile="SDRowCell" position="48px 0px" size="120px 42px" textSize="12px" name="inProduct"/>
-                    <Text profile="SDRowCell" position="176px 0px" size="96px 42px" textSize="12px" name="inGroup"/>
-                    <Text profile="SDRowCellR" position="280px 0px" size="70px 42px" textSize="12px" name="inHeld"/>
-                    <Text profile="SDRowCellR" position="358px 0px" size="58px 42px" textSize="12px" name="inNeeds"/>
-                    <Text profile="SDRowCellR" position="424px 0px" size="70px 42px" textSize="12px" name="inCost"/>
-                    <Text profile="SDRowCellR" position="502px 0px" size="69px 42px" textSize="12px" name="inActual"/>
+                    <Text profile="ARRowCell" position="48px 0px" size="120px 42px" textSize="12px" name="inProduct"/>
+                    <Text profile="ARRowCell" position="176px 0px" size="96px 42px" textSize="12px" name="inGroup"/>
+                    <Text profile="ARRowCellR" position="280px 0px" size="70px 42px" textSize="12px" name="inHeld"/>
+                    <Text profile="ARRowCellR" position="358px 0px" size="58px 42px" textSize="12px" name="inNeeds"/>
+                    <Text profile="ARRowCellR" position="424px 0px" size="70px 42px" textSize="12px" name="inCost"/>
+                    <Text profile="ARRowCellR" position="502px 0px" size="69px 42px" textSize="12px" name="inActual"/>
                 </ListItem>
                 </SmoothList>
             <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"
@@ -525,27 +525,27 @@
              out", which is the pairing that column is for.
              16+24=40 | 48+150=198 | 206+120=326 | 334+120=454 | 462+109=571,
              +16 margin = 587 -->
-        <Bitmap profile="SDList" id="prodHeaderRow" position="893px -624px" size="587px 40px"
+        <Bitmap profile="ARList" id="prodHeaderRow" position="893px -624px" size="587px 40px"
                 visible="false">
-            <Text profile="SDHeaderLeft" position="48px 0px" size="150px 40px" textSize="11px"
+            <Text profile="ARHeaderLeft" position="48px 0px" size="150px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_product"/>
-            <Text profile="SDHeaderRight" position="206px 0px" size="120px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="206px 0px" size="120px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_held"/>
-            <Text profile="SDHeaderRight" position="334px 0px" size="120px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="334px 0px" size="120px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_prodRate"/>
-            <Text profile="SDHeaderRight" position="462px 0px" size="109px 40px" textSize="11px"
+            <Text profile="ARHeaderRight" position="462px 0px" size="109px 40px" textSize="11px"
                   text="$l10n_ar_hi_col_sellValue"/>
         <ThreePartBitmap profile="fs25_lineSeparatorBottom" position="0px 2px"/>
         </Bitmap>
-        <GuiElement profile="SDList" id="prodListBox" position="893px -666px" size="587px 144px" visible="false">
-            <SmoothList profile="SDList" id="prodList" focusChangeTop="nil" focusChangeBottom="nil"
+        <GuiElement profile="ARList" id="prodListBox" position="893px -666px" size="587px 144px" visible="false">
+            <SmoothList profile="ARList" id="prodList" focusChangeTop="nil" focusChangeBottom="nil"
                         position="0px 0px" size="587px 144px">
-                <ListItem profile="SDListItemStats" name="rowTemplate" size="587px 42px">
+                <ListItem profile="ARListItemStats" name="rowTemplate" size="587px 42px">
                     <Bitmap name="fillIcon" position="16px 9px" size="24px 24px" visible="false"/>
-                    <Text profile="SDRowCell" position="48px 0px" size="150px 42px" textSize="12px" name="pdProduct"/>
-                    <Text profile="SDRowCellR" position="206px 0px" size="120px 42px" textSize="12px" name="pdHeld"/>
-                    <Text profile="SDRowCellR" position="334px 0px" size="120px 42px" textSize="12px" name="pdRate"/>
-                    <Text profile="SDRowCellR" position="462px 0px" size="109px 42px" textSize="12px" name="pdValue"/>
+                    <Text profile="ARRowCell" position="48px 0px" size="150px 42px" textSize="12px" name="pdProduct"/>
+                    <Text profile="ARRowCellR" position="206px 0px" size="120px 42px" textSize="12px" name="pdHeld"/>
+                    <Text profile="ARRowCellR" position="334px 0px" size="120px 42px" textSize="12px" name="pdRate"/>
+                    <Text profile="ARRowCellR" position="462px 0px" size="109px 42px" textSize="12px" name="pdValue"/>
                 </ListItem>
                 </SmoothList>
             <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px"

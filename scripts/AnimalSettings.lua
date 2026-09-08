@@ -150,6 +150,52 @@ AnimalSettings.DEFS = {
     },
 }
 
+-- ---------------------------------------------------------------------------
+-- WHAT NEEDS DISTRIBUTION REDUX, AND WHAT DOES NOT
+--
+-- Most of this mod stands on its own: manual Buy/Sell, the buy schedules, the Herd Adviser and the
+-- Animals tab are all AR's. Exactly two settings are meaningless without DR, and for opposite
+-- reasons -- one hands DR a plan to act on, the other measures DR's own work:
+--
+--   advancedFeeder -- a feed PLANNER registered into DR's allocator. AR states the need; DR finds
+--                     the stock and moves it (5.66). With no allocator there is nothing to plan for.
+--   passProfiler   -- turns on DR's hourly-pass profiler. There is no pass to profile.
+--
+-- GATED ON THE CAPABILITY, NEVER ON DR'S PRESENCE, and that distinction is live rather than
+-- theoretical: `requestPassProfiler` shipped on 2026-09-07, while `registerSettingsTab` shipped in
+-- DR 1.1.0.1. So a player running the older DR with today's AR HAS a settings page, sees the
+-- Performance logging row, and nothing at all would happen when they moved it. Testing
+-- `AnimalRedux.DR ~= nil` would call that combination supported. Testing for the function itself
+-- is the only answer that stays true as either mod moves.
+--
+-- THE STORED VALUE IS NEVER REWRITTEN. An unavailable setting is DISABLED, not reset: the player's
+-- choice sits untouched in the savegame and comes back the moment the capability does. DR 5.48
+-- deleted a whole subsystem over this ("a player's mode is never rewritten"), and a settings row is
+-- the same promise one layer up -- losing a preference because a mod was absent for one session is
+-- exactly the kind of silent damage that is never traced back.
+AnimalSettings.REQUIRES = {
+    advancedFeeder = "feedPlanner",
+    passProfiler   = "passProfiler",
+}
+
+---Is the DR capability this setting needs actually present?
+--
+-- True for anything with no requirement, so the common case costs one table lookup and every other
+-- setting is unaffected.
+function AnimalSettings.capabilityOk(id)
+    local need = AnimalSettings.REQUIRES[id]
+    if need == nil then return true end
+    local dr = _G["FS25_Distribution_Redux"]
+    local SD = dr ~= nil and dr.SmartDistribution or nil
+    if SD == nil then return false end
+    if need == "feedPlanner" then
+        return SD.API ~= nil and SD.API.registerFeedPlanner ~= nil
+    elseif need == "passProfiler" then
+        return SD.requestPassProfiler ~= nil
+    end
+    return false                                  -- an unknown requirement is not satisfied
+end
+
 ---Current index per setting id. Seeded from the defaults so every reader has an
 -- answer before a savegame has been loaded, which matters because the GUI can be
 -- opened on a mission that failed to load our file.
@@ -206,7 +252,17 @@ end
 function AnimalSettings.tradingEnabled()        return AnimalSettings.get("trading")        ~= false end
 function AnimalSettings.autoTraderEnabled()     return AnimalSettings.get("autoTrader")     ~= false end
 function AnimalSettings.herdAdviserEnabled()    return AnimalSettings.get("herdAdviser")    ~= false end
-function AnimalSettings.advancedFeederEnabled() return AnimalSettings.get("advancedFeeder") ~= false end
+-- CAPABILITY FIRST, THEN THE STORED VALUE. Without DR's planner API this feature cannot do anything,
+-- so it must not report itself as on -- otherwise anything reading it (a status line, a future
+-- Herd Inspector hint) would describe a feature that is not running. The stored preference is left
+-- exactly as it is; this answers "is it in effect", not "did the player want it".
+--
+-- Belt and braces on the pass itself: feedPlanner is only ever CALLED by DR, so with DR absent this
+-- guard is unreachable there. It earns its place on the display side, and on the old-DR case.
+function AnimalSettings.advancedFeederEnabled()
+    if not AnimalSettings.capabilityOk("advancedFeeder") then return false end
+    return AnimalSettings.get("advancedFeeder") ~= false
+end
 function AnimalSettings.debugEnabled()          return AnimalSettings.get("debug")          == true  end
 
 -- ---------------------------------------------------------------------------
@@ -395,17 +451,48 @@ function AnimalSettings.rows()
     local rows = {}
     for _, id in ipairs(AnimalSettings.ORDER) do
         local def = AnimalSettings.DEFS[id]
+        local okCap = AnimalSettings.capabilityOk(id)
         local strings = {}
         for i, key in ipairs(def.strings) do
             strings[i] = l10n(key, i == 1 and "Off" or "On")
         end
+        -- AN UNAVAILABLE ROW KEEPS ITS OPTIONS AND SAYS SO IN THE TITLE.
+        --
+        -- COLLAPSING IT TO ONE OPTION WAS THE FIRST DESIGN AND IT WOULD HAVE DELETED THE ROW. DR
+        -- validates a provider's definitions and requires `#strings >= 2` (DistributionAPI.lua:765),
+        -- so a single-option row is REFUSED -- the setting would have vanished from the page
+        -- entirely, with a line in the log nobody reads. That is worse than the confusion it was
+        -- meant to prevent, and it would have bitten hardest in the case this exists for: an OLD DR,
+        -- where the row is the only thing that can explain why the feature is inert.
+        --
+        -- So the row stays a normal row and three things make it inert instead:
+        --   * the TITLE carries the reason, where the player is already looking;
+        --   * get() pins to 1, so it always READS off;
+        --   * set() refuses, so a press changes nothing.
+        -- DR re-renders every row straight after a set (onExtOptionChanged -> renderExtRows), so the
+        -- selector visibly snaps back rather than sitting on a value that is not in effect. Nothing
+        -- here needs DR to understand a new field, which is what makes it work on the old version.
+        local title = l10n(def.title, id)
+        if not okCap then
+            title = string.format("%s  %s", title, l10n("ar_set_needsDR", "(needs Distribution Redux)"))
+        end
         rows[#rows + 1] = {
             id      = id,
-            title   = l10n(def.title, id),
-            tooltip = l10n(def.tooltip, nil),
+            title   = title,
+            tooltip = okCap and l10n(def.tooltip, nil)
+                             or l10n("ar_set_needsDR_tt", nil),
             strings = strings,
-            get     = function() return AnimalSettings.index(id) end,
-            set     = function(i) AnimalSettings.setIndex(id, i) end,
+            -- READ AS OFF while unavailable, but the STORED index is untouched -- see REQUIRES.
+            -- Reporting the stored value here would show "Every pass" against a row that cannot
+            -- do anything, which is the display/behaviour disagreement this whole pass is about.
+            get     = function()
+                          if not AnimalSettings.capabilityOk(id) then return 1 end
+                          return AnimalSettings.index(id)
+                      end,
+            set     = function(i)
+                          if not AnimalSettings.capabilityOk(id) then return end
+                          AnimalSettings.setIndex(id, i)
+                      end,
         }
     end
     return rows
@@ -487,7 +574,13 @@ end
 
 function AnimalSettings.install(SD)
     if SD == nil or SD.API == nil or SD.API.registerSettingsTab == nil then
-        warn("Distribution Redux has no settings tab API (needs v8+); AR settings are not shown")
+        if SD == nil then
+            -- STANDALONE. Not a fault and not the same thing as an old DR: AR has its own
+            -- menu, and this tab simply has no DR page to attach to.
+            dbg("no Distribution Redux; the settings tab stays on AR's own menu")
+        else
+            warn("Distribution Redux has no settings tab API (needs v8+); AR shows it on its own menu instead")
+        end
         return false
     end
     local ok, res = pcall(SD.API.registerSettingsTab, AnimalSettings.MOD_NAME,

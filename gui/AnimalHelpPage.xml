@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!-- Animal Redux: the USER GUIDE page of this mod's own menu.
+     Only loaded when Distribution Redux is absent; with DR present the same
+     topics are registered as a tab on DR's User Guide page instead.
+
+     NO TAB STRIP, deliberately. DR's equivalent carries one because two mods
+     write into that page; here AR is the only provider, so a strip would show a
+     single tab with nothing to switch to. The rule the author chose is that the
+     strip appears only when a second provider exists, and there is no second
+     provider to build one for yet.
+
+     TWO LISTS: contents on the left, the selected topic's body on the right.
+     Each has its own slider, because a SmoothList with ignoreMouse set loses
+     wheel scrolling with it (DR 5.77b) and a guide has to be scrollable.
+-->
+<GUI name="animalHelpPage">
+    <GuiElement profile="fs25_menuContainer">
+        <GuiElement profile="fs25_menuHeaderPanel">
+            <Bitmap profile="fs25_menuHeaderIconBg">
+                <Bitmap profile="fs25_menuHeaderIcon" imageSliceId="gui.icon_options_help2"/>
+            </Bitmap>
+            <Text profile="fs25_menuHeaderTitle" text="$l10n_ar_title_help"/>
+        </GuiElement>
+
+        <!-- left: the table of contents -->
+        <GuiElement profile="ARList" position="40px -96px" size="460px 760px">
+            <SmoothList profile="ARList" id="topicList" position="0px 0px" size="460px 760px"
+                        onSelectionChanged="onTopicChanged" focusChangeTop="nil" focusChangeBottom="nil">
+                <ListItem profile="ARListItem" name="rowTemplate" size="460px 52px">
+                    <Text profile="ARRowCell" position="18px 0px" size="424px 52px" textSize="20px" name="topicName"/>
+                </ListItem>
+            </SmoothList>
+            <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px" size="12px 760px" with="anchorTopRight">
+                <Slider profile="fs25_listSlider" size="6px 752px" dataElementId="topicList" id="topicSlider"/>
+            </ThreePartBitmap>
+        </GuiElement>
+
+        <!-- right: the selected topic, one line per row so the list can scroll it -->
+        <GuiElement profile="ARList" position="540px -96px" size="1180px 760px">
+            <SmoothList profile="ARList" id="bodyList" position="0px 0px" size="1180px 760px"
+                        focusChangeTop="nil" focusChangeBottom="nil">
+                <ListItem profile="ARBodyItem" name="rowTemplate" size="1180px 30px">
+                    <Text profile="ARBodyCell" position="6px 0px" size="1168px 30px" name="bodyLine"/>
+                </ListItem>
+            </SmoothList>
+            <ThreePartBitmap profile="fs25_listSliderBox" position="12px 0px" size="12px 760px" with="anchorTopRight">
+                <Slider profile="fs25_listSlider" size="6px 752px" dataElementId="bodyList" id="bodyListSlider"/>
+            </ThreePartBitmap>
+        </GuiElement>
+    </GuiElement>
+</GUI>

@@ -4,7 +4,7 @@
      silences the version notice. -->
 <modDesc descVersion="111">
     <author>Bones</author>
-    <version>0.0.0.1</version>
+    <version>0.0.0.2</version>
 
     <title>
         <en>Animal Redux</en>
@@ -13,9 +13,13 @@
         <en><![CDATA[
 Animal Redux
 
-An extension to Distribution Redux that deepens Farming Simulator 25's animal husbandry.
+Deepens Farming Simulator 25's animal husbandry: a herd inspector, buy and sell
+scheduling, feed planning and per-barn profit.
 
-REQUIRES Distribution Redux. This mod will not run without it.
+Runs on its own. Distribution Redux is optional - install both and Animal Redux
+adds its pages to the Distribution Redux menu and can plan feed through it. Two
+settings need Distribution Redux and say so in the settings screen when it is
+not installed; everything else works either way.
 
 Feedback/Issues: https://github.com/Bones50/FS25-Animal-Redux
         ]]></en>
@@ -24,6 +28,15 @@ Feedback/Issues: https://github.com/Bones50/FS25-Animal-Redux
     <iconFilename>icon_AnimalRedux.dds</iconFilename>
     <multiplayer supported="true"/>
 
+    <actions>
+        <action name="ANIMALREDUX_OPEN_MANAGER" category="BASE"/>
+    </actions>
+    <inputBinding>
+        <actionBinding action="ANIMALREDUX_OPEN_MANAGER">
+            <binding device="KB_MOUSE_DEFAULT" input="KEY_backslash"/>
+        </actionBinding>
+    </inputBinding>
+
     <extraSourceFiles>
         <sourceFile filename="scripts/AnimalRedux.lua"/>
         <!-- EARLY: it owns the savegame file and every other script registers a
@@ -31,6 +44,7 @@ Feedback/Issues: https://github.com/Bones50/FS25-Animal-Redux
         <sourceFile filename="scripts/AnimalPersist.lua"/>
         <sourceFile filename="scripts/AnimalSettings.lua"/>
         <sourceFile filename="scripts/AnimalHelp.lua"/>
+        <sourceFile filename="scripts/AnimalPanel.lua"/>
         <sourceFile filename="scripts/AnimalHerdData.lua"/>
         <sourceFile filename="scripts/AnimalFeedModel.lua"/>
         <sourceFile filename="scripts/AnimalEconomics.lua"/>
@@ -46,6 +60,11 @@ Feedback/Issues: https://github.com/Bones50/FS25-Animal-Redux
         <sourceFile filename="scripts/AnimalHerdPolicy.lua"/>
         <sourceFile filename="scripts/gui/TextPicker.lua"/>
         <sourceFile filename="scripts/gui/AnimalTabs.lua"/>
+        <sourceFile filename="scripts/gui/AnimalMenuPage.lua"/>
+        <sourceFile filename="scripts/gui/AnimalMenu.lua"/>
+        <sourceFile filename="scripts/gui/AnimalSettingsPage.lua"/>
+        <sourceFile filename="scripts/gui/AnimalHelpPage.lua"/>
+
         <sourceFile filename="scripts/gui/HerdInspectorPage.lua"/>
         <sourceFile filename="scripts/gui/AnimalTradeDialog.lua"/>
         <sourceFile filename="scripts/gui/AnimalBuyScheduleDialog.lua"/>
@@ -54,13 +73,21 @@ Feedback/Issues: https://github.com/Bones50/FS25-Animal-Redux
         <sourceFile filename="scripts/AnimalFoodProbe.lua"/>
     </extraSourceFiles>
 
-    <!-- HARD DEPENDENCY. The game warns the player when this is missing; the mod
-         ALSO guards in code (AnimalRedux.resolveDistributionRedux), because the
-         dependency element is not documented in the SDK and whether it hard-blocks
-         loading or merely warns has not been confirmed in game. Belt and braces. -->
-    <dependencies>
-        <dependency>FS25_Distribution_Redux</dependency>
-    </dependencies>
+    <!-- NO <dependencies> BLOCK, AND THAT IS DELIBERATE.
+         This mod declared FS25_Distribution_Redux as a hard dependency until
+         2026-09-07. The comment that stood here wondered whether that element
+         "hard-blocks loading or merely warns" and said it had not been confirmed
+         in game. IT IS NOW: it hard-blocks. With DR removed the game refuses to
+         load this mod and prompts the player to reinstall DR, so no amount of
+         guarding in code could ever have been reached.
+         Animal Redux is independently installable as of that date: it carries its
+         own GUI profiles, its own husbandry panel renderer, its own menu and page
+         base classes, and gates the two settings that genuinely need DR on the
+         CAPABILITY being present rather than on DR being installed. The code
+         guards (AnimalRedux.resolveDistributionRedux and friends) remain and are
+         now the only mechanism, which is the point.
+         DO NOT REINSTATE THIS ELEMENT to express "works better with DR". It does
+         not mean that; it means "refuse to run without it". -->
 
     <l10n filenamePrefix="translations/translation"/>
 </modDesc>

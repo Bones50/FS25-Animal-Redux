@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8" standalone="no" ?>
+<!-- Animal Redux: the SETTINGS page of this mod's own menu.
+     Only loaded when Distribution Redux is absent; with DR present the same rows
+     are registered as a tab on DR's settings page instead (AnimalSettings.install),
+     and both read AnimalSettings.rows(), so there is one set of settings.
+
+     EIGHT GENERIC SLOTS for six settings. The page fills what it needs and hides
+     the rest, so a new setting costs a Lua definition and nothing here - which is
+     the opposite of DR's own settings page, where every row is hand authored and
+     a missing one means the setting silently never appears (DR 5.41).
+
+     NO TAB STRIP: AR is the only provider here, so there is nothing to switch to.
+     The rows sit in a ScrollingLayout with its own slider, and the layout is NOT
+     given the 46px top offset DR's needs, precisely because there is no strip
+     above it to make room for.
+-->
+<GUI name="animalSettingsPage">
+    <GuiElement profile="fs25_menuContainer">
+        <GuiElement profile="fs25_menuHeaderPanel">
+            <Bitmap profile="fs25_menuHeaderIconBg">
+                <Bitmap profile="fs25_menuHeaderIcon" imageSliceId="gui.icon_options_generalSettings2"/>
+            </Bitmap>
+            <Text profile="fs25_menuHeaderTitle" text="$l10n_ar_title_settings"/>
+        </GuiElement>
+
+        <ScrollingLayout profile="fs25_settingsLayout" id="boxLayout">
+            <Bitmap profile="fs25_multiTextOptionContainer" name="arRow1" id="arRow1" visible="false">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" onClick="onOptionChanged"
+                                 name="arOpt1" id="arOpt1">
+                    <Text profile="fs25_multiTextOptionTooltip" name="arTip1" id="arTip1" text=""/>
+                </MultiTextOption>
+                <Text profile="fs25_settingsMultiTextOptionTitle" name="arTitle1" id="arTitle1" text=""/>
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" name="arRow2" id="arRow2" visible="false">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" onClick="onOptionChanged"
+                                 name="arOpt2" id="arOpt2">
+                    <Text profile="fs25_multiTextOptionTooltip" name="arTip2" id="arTip2" text=""/>
+                </MultiTextOption>
+                <Text profile="fs25_settingsMultiTextOptionTitle" name="arTitle2" id="arTitle2" text=""/>
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" name="arRow3" id="arRow3" visible="false">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" onClick="onOptionChanged"
+                                 name="arOpt3" id="arOpt3">
+                    <Text profile="fs25_multiTextOptionTooltip" name="arTip3" id="arTip3" text=""/>
+                </MultiTextOption>
+                <Text profile="fs25_settingsMultiTextOptionTitle" name="arTitle3" id="arTitle3" text=""/>
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" name="arRow4" id="arRow4" visible="false">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" onClick="onOptionChanged"
+                                 name="arOpt4" id="arOpt4">
+                    <Text profile="fs25_multiTextOptionTooltip" name="arTip4" id="arTip4" text=""/>
+                </MultiTextOption>
+                <Text profile="fs25_settingsMultiTextOptionTitle" name="arTitle4" id="arTitle4" text=""/>
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" name="arRow5" id="arRow5" visible="false">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" onClick="onOptionChanged"
+                                 name="arOpt5" id="arOpt5">
+                    <Text profile="fs25_multiTextOptionTooltip" name="arTip5" id="arTip5" text=""/>
+                </MultiTextOption>
+                <Text profile="fs25_settingsMultiTextOptionTitle" name="arTitle5" id="arTitle5" text=""/>
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" name="arRow6" id="arRow6" visible="false">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" onClick="onOptionChanged"
+                                 name="arOpt6" id="arOpt6">
+                    <Text profile="fs25_multiTextOptionTooltip" name="arTip6" id="arTip6" text=""/>
+                </MultiTextOption>
+                <Text profile="fs25_settingsMultiTextOptionTitle" name="arTitle6" id="arTitle6" text=""/>
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" name="arRow7" id="arRow7" visible="false">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" onClick="onOptionChanged"
+                                 name="arOpt7" id="arOpt7">
+                    <Text profile="fs25_multiTextOptionTooltip" name="arTip7" id="arTip7" text=""/>
+                </MultiTextOption>
+                <Text profile="fs25_settingsMultiTextOptionTitle" name="arTitle7" id="arTitle7" text=""/>
+            </Bitmap>
+            <Bitmap profile="fs25_multiTextOptionContainer" name="arRow8" id="arRow8" visible="false">
+                <MultiTextOption profile="fs25_settingsMultiTextOption" onClick="onOptionChanged"
+                                 name="arOpt8" id="arOpt8">
+                    <Text profile="fs25_multiTextOptionTooltip" name="arTip8" id="arTip8" text=""/>
+                </MultiTextOption>
+                <Text profile="fs25_settingsMultiTextOptionTitle" name="arTitle8" id="arTitle8" text=""/>
+            </Bitmap>
+        </ScrollingLayout>
+
+        <!-- The slider is a SEPARATE element driving the layout through dataElementId; it wraps in a
+             container carrying the layout's own profile so it inherits the same box and nothing here
+             has to know the width. fs25_listSliderBox is anchorStretchingYRight in its own profile,
+             so it lands just outside the list's right edge. -->
+        <GuiElement profile="fs25_settingsLayout">
+            <ThreePartBitmap profile="fs25_listSliderBox" size="6px 100%">
+                <Slider profile="fs25_listSlider" dataElementId="boxLayout" id="settingsSlider"/>
+            </ThreePartBitmap>
+        </GuiElement>
+    </GuiElement>
+</GUI>

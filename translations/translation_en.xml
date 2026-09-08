@@ -47,6 +47,10 @@
      =========================================================================== -->
 <l10n>
     <texts>
+        <text name="input_ANIMALREDUX_OPEN_MANAGER" text="Open Animal Redux menu"/>
+        <text name="ar_input_openMenu"      text="Animal Redux menu"/>
+        <text name="ar_title_settings"      text="ANIMAL REDUX - SETTINGS"/>
+        <text name="ar_title_help"          text="ANIMAL REDUX - USER GUIDE"/>
         <!-- Self test. Resolved once at load so a broken translation chain is
              reported in log.txt immediately, rather than surfacing later as
              mysteriously untranslated UI. The value is matched in code, so
@@ -494,6 +498,10 @@
         <text name="ar_set_prof_off"        text="Off"/>
         <text name="ar_set_prof_slow"       text="Slow passes only"/>
         <text name="ar_set_prof_all"        text="Every pass (diagnostic)"/>
+        <text name="ar_set_needsDR"         text="(needs Distribution Redux)"/>
+        <text name="ar_unit_litre"          text=" L"/>
+        <text name="ar_unit_kilolitre"      text=" kL"/>
+        <text name="ar_set_needsDR_tt"      text="This setting needs Distribution Redux, which is not installed (or is an older version without the feature). Animal Redux works without it - only this option is unavailable. Your choice has been kept and will apply again as soon as Distribution Redux is present."/>
 
         <!-- The confirmation raised when the Auto Trader is switched off. It NAMES
              the counts, because "this will delete things" is not a question a

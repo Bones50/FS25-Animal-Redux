@@ -34,13 +34,21 @@ AnimalRedux = {}
 
 AnimalRedux.MOD_NAME = g_currentModName or "FS25_Animal_Redux"
 AnimalRedux.MOD_DIR  = g_currentModDirectory or ""
-AnimalRedux.VERSION  = "0.0.0.1"
+AnimalRedux.VERSION  = "0.0.0.2"
 
--- The mod we depend on, and the lowest API version we can work against. DR does
--- not publish an API yet, so DR_MIN_API is recorded and reported but not yet
--- enforced -- see AnimalRedux.checkApiVersion.
+-- The mod we integrate with, and the API version that can host ALL of Animal
+-- Redux's UI: the Herd Inspector page (v3), the settings tab (v8) and the User
+-- Guide tab (v9).
+--
+-- IT IS ADVISORY, AND DELIBERATELY SO. Not one decision in this file is made on
+-- it -- every feature tests for the FUNCTION it needs (drIntegrationGaps,
+-- AnimalSettings.capabilityOk), because a version number cannot answer "can DR do
+-- this": Distribution Redux carried the string 1.1.0.1 from 2026-08-16 to
+-- 2026-09-07 while its API went from v1 to v9, so two players both running
+-- "DR 1.1.0.1" have completely different capabilities. What the number is FOR is
+-- telling a player what to update TO, which a capability test cannot express.
 AnimalRedux.DR_MOD_NAME = "FS25_Distribution_Redux"
-AnimalRedux.DR_MIN_API  = 1
+AnimalRedux.DR_MIN_API  = 9
 
 AnimalRedux.debug = false
 
@@ -152,8 +160,10 @@ function AnimalRedux.resolveDistributionRedux()
     return nil, "not found"
 end
 
----Report DR's API version. DR does not publish one yet; treat that as version 0
--- and let the caller decide, rather than refusing to load against it.
+---Report DR's API version, and whether it reaches DR_MIN_API. A DR that publishes
+-- no VERSION at all reads as 0 and the caller decides -- this never refuses to run.
+-- The boolean is for MESSAGES only; behaviour is gated on capabilities (see
+-- DR_MIN_API's note above).
 function AnimalRedux.checkApiVersion(SD)
     local api = SD ~= nil and SD.API or nil
     local version = (type(api) == "table" and tonumber(api.VERSION)) or 0
@@ -625,22 +635,45 @@ end
 function AnimalRedux.onMissionLoaded()
     local SD, whereOrWhy, env = AnimalRedux.resolveDistributionRedux()
 
-    if SD == nil then
-        AnimalRedux.warn("Distribution Redux was not found (%s). Animal Redux requires it and is DISABLED.",
-            tostring(whereOrWhy))
-        AnimalRedux.enabled = false
-        return
-    end
-
+    -- NO DR IS NOT A FAILURE ANY MORE. This used to set enabled = false and RETURN, which is what
+    -- made every bit of the standalone work unreachable: modDesc's <dependencies> stopped the mod
+    -- loading at all, and once that was removed THIS stopped it running. Three layers of one
+    -- assumption, each hiding the next -- and only the last of them left a line in the log.
+    --
+    -- `enabled` is true either way now. It means "this mod is running", NOT "DR is present": the
+    -- things that genuinely need DR ask about DR (or better, about the CAPABILITY they need) at the
+    -- point of use -- AnimalSettings.capabilityOk and AnimalRedux.canUseDRMenu.
     AnimalRedux.DR = SD
     AnimalRedux.DR_ENV = env          -- DR's whole environment; the GUI page needs
-                                      -- DistributionMenuPage, which is not on SmartDistribution
+                                      -- DistributionMenuPage, which is not on SmartDistribution.
+                                      -- Both are nil when running standalone, which is fine:
+                                      -- HerdInspectorPage falls back to AnimalMenuPage.
     AnimalRedux.enabled = true
 
-    local apiVersion, apiOk = AnimalRedux.checkApiVersion(SD)
-    AnimalRedux.warn("v%s linked to Distribution Redux (global '%s', API v%d%s)",
-        AnimalRedux.VERSION, tostring(whereOrWhy), apiVersion,
-        apiOk and "" or string.format("; this mod wants v%d+", AnimalRedux.DR_MIN_API))
+    local apiVersion, apiOk = 0, false
+    if SD == nil then
+        AnimalRedux.warn("v%s running STANDALONE -- Distribution Redux not found (%s). Feed planning "
+            .. "and performance logging need it and are off; everything else works.",
+            AnimalRedux.VERSION, tostring(whereOrWhy))
+    else
+        apiVersion, apiOk = AnimalRedux.checkApiVersion(SD)
+        AnimalRedux.warn("v%s linked to Distribution Redux (global '%s', API v%d%s)",
+            AnimalRedux.VERSION, tostring(whereOrWhy), apiVersion,
+            apiOk and "" or string.format("; this mod wants v%d+", AnimalRedux.DR_MIN_API))
+
+        -- DR IS THERE BUT TOO OLD TO HOST THE UI. Said once, plainly, and it names the
+        -- missing calls so a report identifies the DR build rather than only its version
+        -- string -- which cannot be trusted to (see DR_MIN_API). Nothing is disabled by
+        -- this: AR builds its own menu instead and every feature still runs.
+        local gaps = AnimalRedux.drIntegrationGaps()
+        if gaps ~= nil and #gaps > 0 then
+            AnimalRedux.warn("Distribution Redux is too old to host Animal Redux's screens "
+                .. "(API v%d, this mod wants v%d+; missing: %s). Animal Redux will use its OWN "
+                .. "menu instead -- nothing is lost, and updating Distribution Redux puts the "
+                .. "screens back into its menu.",
+                apiVersion, AnimalRedux.DR_MIN_API, table.concat(gaps, ", "))
+        end
+    end
 
     -- L10N SELF-TEST. There is no UI yet, so nothing else would reveal a broken
     -- translation chain until the first screen is built -- and by then the cause
@@ -691,7 +724,16 @@ function AnimalRedux.onMissionLoaded()
     -- ---- FEED PLANNING -----------------------------------------------------
     -- Registered only when DR publishes an API we understand. Without it the mod
     -- still loads and the probes still work; DR simply keeps its own feed logic.
-    if apiOk and SD.API ~= nil and SD.API.registerFeedPlanner ~= nil then
+    -- ---- FROM HERE, ONLY WHAT DR CAN HOST ------------------------------------------------------
+    -- Each of these registers AR's data or UI INTO DR. With no DR there is nothing to register into,
+    -- and the matching feature reports itself off through AnimalSettings.capabilityOk rather than
+    -- looking available and quietly doing nothing.
+    -- ON THE CALL, NOT ON apiOk. This read `SD ~= nil and apiOk and ...` while
+    -- DR_MIN_API was 1, so the version half never bit. Raising it to 9 would have
+    -- switched feed planning OFF for every DR older than v9 -- although
+    -- registerFeedPlanner has existed since v1 and works perfectly there. The
+    -- panel below already had this right; the planner did not.
+    if SD ~= nil and SD.API ~= nil and SD.API.registerFeedPlanner ~= nil then
         local okR = pcall(SD.API.registerFeedPlanner, AnimalRedux.MOD_NAME, AnimalRedux.feedPlanner)
         AnimalRedux.feedPlanningActive = okR and true or false
         if okR then
@@ -699,11 +741,12 @@ function AnimalRedux.onMissionLoaded()
         else
             AnimalRedux.warn("feed planner could not be registered; DR keeps its own feed logic")
         end
+    elseif SD == nil then
+        AnimalRedux.feedPlanningActive = false      -- standalone: nothing to plan FOR; said so above
     else
         AnimalRedux.feedPlanningActive = false
-        AnimalRedux.warn("Distribution Redux exposes no feed API (needs v%d+, found v%d) -- "
-            .. "feed planning is INACTIVE and DR keeps its own logic",
-            AnimalRedux.DR_MIN_API, apiVersion)
+        AnimalRedux.warn("Distribution Redux exposes no feed planner API (found v%d) -- "
+            .. "feed planning is INACTIVE and DR keeps its own logic", apiVersion)
     end
 
     -- ---- THE HUSBANDRY PANEL (DR API v4) ------------------------------------
@@ -711,7 +754,7 @@ function AnimalRedux.onMissionLoaded()
     -- independent capability, and a DR that is too old for one may still take the
     -- others. Gated on the CALL existing rather than on the version number, so a
     -- DR that adds it in a later build still works without a bump here.
-    if SD.API ~= nil and SD.API.registerHusbandryPanel ~= nil then
+    if SD ~= nil and SD.API ~= nil and SD.API.registerHusbandryPanel ~= nil then
         local okP = pcall(SD.API.registerHusbandryPanel, AnimalRedux.MOD_NAME,
                           AnimalRedux.husbandryPanel)
         AnimalRedux.panelActive = okP and true or false
@@ -720,6 +763,10 @@ function AnimalRedux.onMissionLoaded()
         else
             AnimalRedux.warn("husbandry panel could not be registered")
         end
+    elseif SD == nil then
+        -- The panel still DRAWS on our own page: AnimalPanel is ours now. What is inactive is the
+        -- copy DR embeds in ITS Animal Husbandry tab, and there is no such tab without DR.
+        AnimalRedux.panelActive = false
     else
         AnimalRedux.panelActive = false
         AnimalRedux.warn("Distribution Redux has no husbandry panel API (needs v4+, found v%d)",
@@ -732,16 +779,24 @@ function AnimalRedux.onMissionLoaded()
     -- tab registry, which the page reads on every open. Doing it now means the
     -- saved values are applied by AnimalPersist a moment later and the first open
     -- already shows them.
-    if AnimalSettings ~= nil and AnimalSettings.install ~= nil then
+    --
+    -- GATED ON canUseDRMenu, or a DR with v8 but not v9 would take the settings tab
+    -- while the guide fell back to AR's own menu -- one screen in two places, and a
+    -- settings page in a different menu from the guide it belongs beside.
+    if AnimalRedux.canUseDRMenu() and AnimalSettings ~= nil and AnimalSettings.install ~= nil then
         AnimalRedux.settingsTabActive = AnimalSettings.install(SD) and true or false
+    else
+        AnimalRedux.settingsTabActive = false      -- it lives on AR's own menu instead
     end
 
     -- ---- THE USER GUIDE TAB (DR API v9) -------------------------------------
     -- Same timing and the same reason as the settings tab above: the guide PAGE is
     -- DR's and already exists, so this only adds a row to DR's tab registry, which
     -- the page reads on every open.
-    if AnimalHelp ~= nil and AnimalHelp.install ~= nil then
+    if AnimalRedux.canUseDRMenu() and AnimalHelp ~= nil and AnimalHelp.install ~= nil then
         AnimalRedux.helpTabActive = AnimalHelp.install(SD) and true or false
+    else
+        AnimalRedux.helpTabActive = false          -- it lives on AR's own menu instead
     end
 
     -- ---- THE TAB -------------------------------------------------------------
@@ -754,7 +809,10 @@ function AnimalRedux.onMissionLoaded()
     -- deliberately -- "the comparison between them IS the acceptance test, so the
     -- old one has to keep working until it is deliberately removed" -- and it has
     -- now been removed on that basis, coverage checked column by column (20.28).
-    if SD.API ~= nil and SD.API.onMenuReady ~= nil then
+    -- ONE OR THE OTHER, NEVER BOTH. DR's menu hosts the page when DR can; otherwise AR builds its
+    -- own. Registering into both would put the same page in two menus and give a player two ways to
+    -- reach one screen, which the author ruled out when this split was designed.
+    if AnimalRedux.canUseDRMenu() then
         SD.API.onMenuReady(AnimalRedux.MOD_NAME, function(menu)
             local ok, why = HerdInspectorPage.install(menu)
             if ok then
@@ -763,14 +821,311 @@ function AnimalRedux.onMissionLoaded()
                 AnimalRedux.warn("Herd Inspector tab NOT added: %s", tostring(why))
             end
         end)
+    elseif AnimalRedux.installStandaloneMenu() then
+        -- the key hook is already in place from mod load; building the menu is what arms it
     else
-        AnimalRedux.warn("Distribution Redux has no menu API (needs v3+); no tab")
+        AnimalRedux.warn("no menu available: DR cannot host a page and the standalone menu failed")
     end
 
     -- Features attach from here. Nothing yet -- this build only proves the link.
 end
 
 -- ---------------------------------------------------------------------------
+-- STANDALONE: AR's OWN MENU
+--
+-- Built when Distribution Redux cannot host AR's screens: it is absent, OR it is too old to take
+-- all three of them (drIntegrationGaps). With a current DR none of this runs and a player with
+-- both mods sees no change whatever.
+--
+-- THE GATE IS THE CAPABILITY, NOT DR'S MERE PRESENCE, and the set has to be the WHOLE UI. It first
+-- asked only "can DR host a page", which left a real hole: a DR from between API v3 and v7 took the
+-- Herd Inspector and had nowhere to put the settings or the guide, so those two were reachable from
+-- NOWHERE -- DR was present, so the own-menu fallback was skipped, and DR could not take them. The
+-- question that actually matters is "can anything host ALL of my screens".
+-- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- RESOLUTION-AWARE LAYOUT (ported from DR 6.15)
+--
+-- Needed the moment AR grew its own menu. DR's API.loadMenuPage wraps every page load in this, so
+-- while AR was hosted by DR its pages were widened for free; loading them ourselves is what exposed
+-- it. Reported on a 3441x1440 screen: the whole page squeezed into the left ~78% of the width with
+-- dead space beside it.
+--
+-- WHAT IS ACTUALLY HAPPENING, because "px" in a GUI xml is misleading: it is not a display pixel, it
+-- is a fraction of a 1920-wide REFERENCE. The engine aspect-scales the whole layout into a 16:9 box
+-- and pillarboxes it, so on an ultrawide g_aspectScaleX is about 0.744 and a third of the screen
+-- goes unused. This does NOT defeat that scaling -- doing so would stretch every icon -- it widens
+-- the DESIGN units so the result fills the screen AFTER scaling.
+--
+-- ON 16:9 g_aspectScaleX IS EXACTLY 1, the factor is 1, and nothing changes: byte-identical by
+-- construction rather than by testing. The >= 1 guard also covers 16:10 and anything narrower, where
+-- the reciprocal would SHRINK the tables instead.
+--
+-- INSTALLED ONLY IN THE STANDALONE PATH. With DR present its hook is already on these globals and
+-- AR's pages load through DR's loadMenuPage, so a second hook would apply the factor TWICE.
+-- `_layoutScaling` is true only while AR's own page files load and is cleared on every path, so a
+-- load error cannot leave it widening the base game's menus for the rest of the session.
+AnimalRedux.LAYOUT_TARGET_WIDTH = 0.84    -- fraction of SCREEN width the widest table should occupy
+AnimalRedux.LAYOUT_DESIGN_WIDTH = 1480    -- AR's widest table in design px (HerdInspector: 1464 + margin)
+AnimalRedux._layoutScaling = false
+
+-- IMAGES MUST NOT WIDEN: their proportions are the point. DR 5.80 records a picture rendering at the
+-- wrong aspect purely because a new Bitmap had not been added to this list. The names are AR's own
+-- elements; the profiles are the stock selector arrows and header badge, whose art is atlas-sampled
+-- and garbles outright when resized (DR 5.64).
+AnimalRedux.LAYOUT_KEEP_ASPECT_NAMES = {
+    assetIcon = true, fillIcon = true, brIcon = true, catIcon = true,
+}
+AnimalRedux.LAYOUT_KEEP_ASPECT_PROFILES = {
+    fs25_menuHeaderIcon = true, fs25_menuHeaderIconBg = true,
+    fs25_multiTextOptionLeft = true, fs25_multiTextOptionRight = true,
+}
+
+function AnimalRedux.layoutScaleX()
+    local target = AnimalRedux.LAYOUT_TARGET_WIDTH or 0
+    if target <= 0 then return 1 end
+    local a = g_aspectScaleX
+    if type(a) ~= "number" or a <= 0 or a >= 1 then return 1 end
+    local refW = (type(g_referenceScreenWidth) == "number" and g_referenceScreenWidth > 0)
+                 and g_referenceScreenWidth or 1920
+    local base = ((AnimalRedux.LAYOUT_DESIGN_WIDTH or 1480) / refW) * a
+    if base <= 0 then return 1 end
+    return math.max(1, target / base)
+end
+
+function AnimalRedux.installLayoutWidening()
+    if AnimalRedux._layoutHooked then return end
+    if GuiUtils == nil or GuiElement == nil then return end
+    AnimalRedux._layoutHooked = true
+
+    -- POSITIONS: scale every ODD index (the x of each x/y pair). Always safe -- moving an element
+    -- cannot distort it, so icons travel with the layout instead of being left behind by it.
+    local origScreen = GuiUtils.getNormalizedScreenValues
+    GuiUtils.getNormalizedScreenValues = function(...)
+        local v = origScreen(...)
+        if AnimalRedux._layoutScaling and type(v) == "table" then
+            local f = AnimalRedux.layoutScaleX()
+            if f > 1 then
+                for i = 1, #v, 2 do
+                    if type(v[i]) == "number" then v[i] = v[i] * f end
+                end
+            end
+        end
+        return v
+    end
+
+    -- WIDTHS: hooked here rather than in getNormalizedValue because only here is the ELEMENT in
+    -- hand, and the decision is per element. textSize resolves through a different function and is
+    -- therefore untouched -- columns widen while the text stays the same size, which is the point.
+    local origResolve = GuiElement.resolveSizeString
+    GuiElement.resolveSizeString = function(self, ...)
+        origResolve(self, ...)
+        if not AnimalRedux._layoutScaling then return end
+        local f = AnimalRedux.layoutScaleX()
+        if f <= 1 then return end
+        if self.name ~= nil and AnimalRedux.LAYOUT_KEEP_ASPECT_NAMES[self.name] then return end
+        if self.profile ~= nil and AnimalRedux.LAYOUT_KEEP_ASPECT_PROFILES[self.profile] then return end
+        -- A PERCENTAGE WIDTH RESOLVES FROM THE PARENT, which is already widened; scaling it again
+        -- compounds down the tree (100% in a 100% row in a widened list comes out about 2.4x).
+        local xStr = self.widthStr
+        if xStr == nil and type(self.sizeStr) == "string" then
+            local sp = self.sizeStr:find(" ")
+            xStr = (sp ~= nil) and self.sizeStr:sub(1, sp - 1) or self.sizeStr
+        end
+        if type(xStr) == "string" and xStr:find("%%") ~= nil then return end
+        if type(self.size) == "table" and type(self.size[1]) == "number" then
+            self.size[1] = self.size[1] * f
+            if self.updateAnchorDeltas ~= nil then self:updateAnchorDeltas() end
+        end
+    end
+end
+
+---What Distribution Redux would need to host ALL of Animal Redux's UI, and which
+-- of it is missing. Returns a (possibly empty) list of names, or NIL when there is
+-- no DR at all -- standalone is a supported mode, not a gap, and an empty list
+-- would otherwise mean both "nothing missing" and "nothing to be missing from".
+--
+-- IT IS ALL OR NOTHING BY DESIGN. AR's pages go to DR's menu or to AR's own, never
+-- half each: registering the settings tab on DR's page while the guide lived on
+-- AR's menu would put one screen in two places, which the author ruled out when
+-- this split was designed.
+--
+-- THE THREE PIECES AND WHAT THEY COST IF ABSENT:
+--   onMenuReady/loadMenuPage/addMenuPage (v3)  the Herd Inspector page itself
+--   registerSettingsTab (v8)                   AR's settings
+--   registerHelpTab (v9)                       AR's User Guide
+-- Before this list existed the gate asked only for the v3 group, so a DR between
+-- v3 and v7 took the page and then had nowhere to put the other two -- and AR's
+-- settings and guide were reachable from NOWHERE. Reported as the question "what
+-- happens if a player updates Animal Redux but not Distribution Redux?".
+--
+-- The feed planner and the husbandry panel are NOT here: each registers INTO DR
+-- independently and reports itself off through capabilityOk, so a DR too old for
+-- one of them can still host the menu perfectly well.
+AnimalRedux.DR_UI_CALLS = { "onMenuReady", "loadMenuPage", "addMenuPage",
+                            "registerSettingsTab", "registerHelpTab" }
+
+function AnimalRedux.drIntegrationGaps()
+    local SD = AnimalRedux.DR
+    if SD == nil then return nil end                  -- standalone: not applicable
+    local gaps = {}
+    local env = AnimalRedux.DR_ENV
+    if env == nil or env.DistributionMenuPage == nil then
+        gaps[#gaps + 1] = "DistributionMenuPage"
+    end
+    local api = SD.API
+    for _, fn in ipairs(AnimalRedux.DR_UI_CALLS) do
+        if api == nil or api[fn] == nil then gaps[#gaps + 1] = "API." .. fn end
+    end
+    return gaps
+end
+
+---Can Distribution Redux host AR's whole UI? Capability, never the version number.
+function AnimalRedux.canUseDRMenu()
+    local gaps = AnimalRedux.drIntegrationGaps()
+    return gaps ~= nil and #gaps == 0
+end
+
+function AnimalRedux.installStandaloneMenu()
+    if AnimalRedux._standaloneMenu ~= nil then return true end
+    if g_gui == nil or TabbedMenu == nil or AnimalMenu == nil then
+        AnimalRedux.warn("standalone menu: g_gui/TabbedMenu/AnimalMenu missing")
+        return false
+    end
+    local dir = AnimalRedux.MOD_DIR or ""
+    local ok, err = pcall(function()
+        -- PROFILES FIRST, ALWAYS. A layout naming a profile that has not been loaded does not error;
+        -- it falls back to a default with NO positioning (27.5), so the page would render scattered
+        -- with nothing in the log to say why. Loading them before any loadGui is the whole guard.
+        if AnimalRedux.loadProfiles ~= nil then AnimalRedux.loadProfiles() end
+
+        -- WIDEN WHILE OUR OWN PAGE FILES LOAD, and only then. DR does the same around its own page
+        -- loads; with DR present we never reach here, so the two hooks can never both apply.
+        AnimalRedux.installLayoutWidening()
+        AnimalRedux._layoutScaling = (AnimalRedux.layoutScaleX() > 1)
+
+        -- The PAGE registers itself: HerdInspectorPage.install with no menu takes the standalone
+        -- branch and loadGui's under the name AnimalMenu.xml's FrameReference expects.
+        local okPage, why = HerdInspectorPage.install(nil)
+        if not okPage then error("page: " .. tostring(why), 0) end
+
+        -- The two simple pages: construct, then load their XML under the name AnimalMenu.xml's
+        -- FrameReference expects. Inside the same widening window as the Herd Inspector, since they
+        -- are table layout too.
+        if AnimalSettingsPage ~= nil then
+            AnimalRedux._settingsPage = AnimalSettingsPage.new()
+            g_gui:loadGui(dir .. "gui/AnimalSettingsPage.xml", "animalSettingsPage",
+                          AnimalRedux._settingsPage, true)
+        end
+        if AnimalHelpPage ~= nil then
+            AnimalRedux._helpPage = AnimalHelpPage.new()
+            g_gui:loadGui(dir .. "gui/AnimalHelpPage.xml", "animalHelpPage",
+                          AnimalRedux._helpPage, true)
+        end
+
+        -- THE MENU XML IS CHROME AND IS NOT WIDENED. DR 6.15 excludes its own menu file for exactly
+        -- this reason: the tab strip and footer bar are not table layout, and widening them stretched
+        -- the tab icons and ate the width the content wanted.
+        AnimalRedux._layoutScaling = false
+        AnimalRedux._standaloneMenu = AnimalMenu.new()
+        g_gui:loadGui(dir .. "gui/AnimalMenu.xml", "AnimalMenu", AnimalRedux._standaloneMenu)
+    end)
+    -- CLEARED ON EVERY PATH. Left set by a failure, it would go on widening the base game's own
+    -- menus for the rest of the session -- a bug that would look nothing like its cause.
+    AnimalRedux._layoutScaling = false
+    if not ok then
+        AnimalRedux._standaloneMenu = nil
+        AnimalRedux.warn("standalone menu failed to build: %s", tostring(err))
+        return false
+    end
+    -- NOT ONLY "DR is absent" any more: a DR too old to host the whole UI lands here too,
+    -- and a log line asserting DR is missing would send a reader looking for the wrong thing.
+    print(string.format("[AnimalRedux] own menu built (%s)",
+        AnimalRedux.DR == nil and "Distribution Redux not present"
+                              or "Distribution Redux too old to host it"))
+    return true
+end
+
+---Open AR's own menu. A no-op unless the standalone menu was actually built.
+function AnimalRedux.openStandaloneMenu()
+    if AnimalRedux._standaloneMenu == nil or g_gui == nil then return end
+    g_gui:showGui("AnimalMenu")
+end
+
+-- THE KEY: KEY_backslash, the SAME key DR uses, declared in modDesc so a player who uninstalls DR
+-- keeps the muscle memory rather than learning a second key for the same job.
+--
+-- REGISTERED ONLY WHEN WE OWN THE MENU. The action is declared unconditionally (modDesc is static)
+-- but no handler is attached while DR is present, so DR keeps the key and there is no question of
+-- both mods answering one press.
+-- INSTALLED AT FILE SCOPE (see the call at the bottom), NOT from onMissionLoaded, and that ordering
+-- is the difference between the key working and doing nothing at all. This APPENDS to
+-- PlayerInputComponent.registerActionEvents, so it only ever takes effect the next time that runs --
+-- and by mission-load-finished the player's input context may already have been built, in which case
+-- an appended hook is simply never called. DR installs its own the same way for the same reason.
+--
+-- Hooking early is free because the HANDLER is gated instead: it returns immediately unless the
+-- standalone menu was actually built, so with DR installed this is an empty function call on a
+-- context rebuild and DR keeps the key to itself.
+function AnimalRedux.registerMenuInput()
+    if AnimalRedux._inputInstalled then return end
+    if PlayerInputComponent == nil or PlayerInputComponent.registerActionEvents == nil then
+        AnimalRedux.warn("menu key NOT registered: PlayerInputComponent.registerActionEvents missing")
+        return
+    end
+    AnimalRedux._inputInstalled = true
+
+    PlayerInputComponent.registerActionEvents = Utils.appendedFunction(
+        PlayerInputComponent.registerActionEvents,
+        function(self, ...)
+            if AnimalRedux._standaloneMenu == nil then return end
+            -- OWNER ONLY. In multiplayer this runs for every player component; without the test each
+            -- client would register the key against somebody else's player as well as its own.
+            if self == nil or self.player == nil or not self.player.isOwner then return end
+            if g_inputBinding == nil or InputAction == nil then
+                print("[AnimalRedux] input: g_inputBinding/InputAction missing")
+                return
+            end
+            if InputAction.ANIMALREDUX_OPEN_MANAGER == nil then
+                print("[AnimalRedux] menu key NOT registered: ANIMALREDUX_OPEN_MANAGER is not a known "
+                      .. "action -- check modDesc declares it under <actions>")
+                return
+            end
+            -- THE CONTEXT IS THE WHOLE POINT, and getting this wrong is why the first attempt did
+            -- nothing at all. An action event belongs to an INPUT CONTEXT; registering one outside a
+            -- beginActionEventsModification block does not attach it to the context the player is
+            -- actually in, so the key is simply never seen. This hook also RE-RUNS whenever the
+            -- context is rebuilt, which is what keeps the binding alive across entering a vehicle,
+            -- respawning and so on -- a one-shot registration at mission load could not.
+            local ctx = PlayerInputComponent.INPUT_CONTEXT_NAME
+            g_inputBinding:beginActionEventsModification(ctx)
+            local ok, _, eventId = pcall(g_inputBinding.registerActionEvent, g_inputBinding,
+                InputAction.ANIMALREDUX_OPEN_MANAGER, self,
+                function() AnimalRedux.openStandaloneMenu() end,
+                false, true, false, true, nil, true)
+            if ok and eventId ~= nil then
+                pcall(function()
+                    g_inputBinding:setActionEventText(eventId,
+                        AnimalRedux.l10n("ar_input_openMenu", "Animal Redux menu"))
+                    g_inputBinding:setActionEventTextVisibility(eventId, true)
+                end)
+            else
+                print("[AnimalRedux] menu key registration FAILED: " .. tostring(eventId))
+            end
+            g_inputBinding:endActionEventsModification()
+        end)
+    -- UNCONDITIONAL, not AnimalRedux.log: that one is gated on `debug`, so the whole standalone
+    -- build reported NOTHING on success and a player could not tell "it worked" from "it never ran"
+    -- -- the exact ambiguity DR 5.87c and today's pass profiler both had to be fixed for.
+    -- The hook is in place; whether it BINDS anything depends on the standalone menu existing when
+    -- the context is next built, which is why this says "armed" rather than "registered".
+    print("[AnimalRedux] standalone menu key hook armed (backslash by default)")
+end
+
+-- ---------------------------------------------------------------------------
+-- THE INPUT HOOK GOES IN AT MOD LOAD, before any player exists. See registerMenuInput.
+pcall(AnimalRedux.registerMenuInput)
+
 local function install()
     if Mission00 == nil or Mission00.loadMission00Finished == nil then
         AnimalRedux.warn("Mission00.loadMission00Finished not found; cannot install.")

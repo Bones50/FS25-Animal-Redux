@@ -98,4 +98,125 @@
          thirteenth for one line. -->
     <Profile name="ARRowArrowRight" extends="fs25_multiTextOptionRight" with="anchorStretchingYLeft" />
 
+    <!-- ======================================================================
+         THE ELEVEN PROFILES THIS MOD USED TO BORROW FROM DISTRIBUTION REDUX.
+
+         Ported 2026-09-07, for the standalone plan. AR's layouts named SDList,
+         SDRowCell, SDHeaderLeft, SDBarLabel, SDInputsDialogBox and six more across
+         223 instances - every table, list and dialog in the mod - and every one
+         of them was defined in DR's DistributionSiloProfiles.xml.
+
+         THAT DEPENDENCY FAILED SILENTLY, WHICH IS WHY IT HAD TO GO FIRST. A layout
+         naming a profile nobody loaded does NOT error: it falls back to a default
+         with no positioning at all (27.5, DR 5.64). So without DR installed, every
+         AR table would have rendered scattered across the screen with nothing in
+         the log to say why - the hardest kind of bug to be handed by a player.
+
+         COPIED AND RENAMED, NOT SHARED. Keeping DR's names would have been less
+         work today and would put two mods in one profile registry: whoever loaded
+         first would win, and the day DR changed SDRowCell's height AR would ship a
+         stale copy of it with no error either way. These are AR's now.
+
+         NONE OF THEM NEEDS A PRESET OF DR'S - checked, not assumed: they
+         reference only base-game presets (colorDisabled, fs25_colorMainHighlight
+         and so on), so the port carries no further dependency.
+
+         The inheritance chain was rewired with them: ARHeaderRight extends
+         ARHeaderLeft, ARRowCellR extends ARRowCell, ARBarLabelRight extends
+         ARBarLabel, ARListItemStats extends ARListItem, ARInputsDialogBox extends
+         ARAdvDialogBox. The bases still extend the base game's baseReference /
+         emptyPanel / fs25_dialogBg, which are always present.
+
+         KEPT BYTE-FOR-BYTE OTHERWISE. Anything that looks odd here (SDRowCellR
+         being left-aligned, the 42px row pitch living in the PROFILE rather than
+         the instance size) is deliberate on DR's side and documented there -          DR 5.22 and 5.55. Do not "tidy" them; they are load-bearing geometry.
+         ====================================================================== -->
+
+<Profile name="ARHeaderLeft" extends="baseReference">
+        <imageColor value="0 0 0 0" />
+        <textFocusedColor value="$preset_fs25_colorMainHighlight" />
+        <textHighlightedColor value="$preset_fs25_colorMainHighlight" />
+        <textSize value="16px" />
+        <textBold value="true" />
+        <textUpperCase value="true" />
+        <textColor value="$preset_colorWhite_50" />
+        <textAlignment value="left" />
+        <textDisabledColor value="$preset_colorDisabled" />
+    </Profile>
+
+<Profile name="ARHeaderRight" extends="ARHeaderLeft">
+        <textAlignment value="left" />
+    </Profile>
+
+<Profile name="ARList" extends="emptyPanel" with="anchorStretchingYLeft pivotTopLeft">
+    </Profile>
+
+<Profile name="ARListItem" extends="baseReference" with="anchorTopStretchingX alternating">
+        <height value="56px"/>
+        <imageColor value="$preset_fs25_colorGrey" />
+        <imageSelectedColor value="$preset_fs25_colorMainHighlight" />
+        <alternateBackgroundColor value="$preset_fs25_colorGreyDark_50" />
+    </Profile>
+
+<Profile name="ARListItemStats" extends="ARListItem">
+        <height value="42px"/>
+    </Profile>
+
+<Profile name="ARRowCell" extends="baseReference" with="anchorStretchingYLeft">
+        <textBold value="false" />
+        <textSize value="18px" />
+        <textAlignment value="left" />
+        <textColor value="$preset_fs25_colorMainLight" />
+        <textSelectedColor value="$preset_fs25_colorMainDark" />
+        <textDisabledColor value="$preset_colorDisabled" />
+    </Profile>
+
+<Profile name="ARRowCellR" extends="ARRowCell">
+        <textAlignment value="left" />
+    </Profile>
+
+<Profile name="ARBarLabel" extends="baseReference">
+        <textBold value="false" />
+        <textSize value="11px" />
+        <textAlignment value="left" />
+        <textVerticalAlignment value="middle" />
+        <textColor value="$preset_fs25_colorMainLight" />
+        <textSelectedColor value="$preset_fs25_colorMainDark" />
+    </Profile>
+
+<Profile name="ARBarLabelRight" extends="ARBarLabel">
+        <textAlignment value="right" />
+    </Profile>
+
+<Profile name="ARAdvDialogBox" extends="fs25_dialogBg">
+        <size value="1400px 780px" />
+    </Profile>
+
+<Profile name="ARInputsDialogBox" extends="ARAdvDialogBox">
+        <size value="1400px 900px" />
+    </Profile>
+
+    <!-- The GUIDE's two profiles, ported alongside the other eleven when AR grew its own Help page.
+         A body ROW draws no background of its own (all three image colours transparent) so a long
+         passage reads as prose rather than as a striped table, and the CELL is 16px non-bold, which
+         is what the base game uses for body copy in fs25_dialogText. DR 5.x records the 18px it
+         carried before that being the only reason its guide read larger than every other text panel
+         in the game. -->
+    <Profile name="ARBodyItem" extends="baseReference" with="anchorTopStretchingX">
+        <height value="27px"/>
+        <imageColor value="0 0 0 0" />
+        <imageSelectedColor value="0 0 0 0" />
+        <imageFocusedColor value="0 0 0 0" />
+    </Profile>
+
+    <Profile name="ARBodyCell" extends="baseReference" with="anchorStretchingYLeft">
+        <textBold value="false" />
+        <textSize value="16px" />
+        <textAlignment value="left" />
+        <textVerticalAlignment value="middle" />
+        <textColor value="$preset_fs25_colorMainLight" />
+        <textSelectedColor value="$preset_fs25_colorMainLight" />
+        <textFocusedColor value="$preset_fs25_colorMainLight" />
+    </Profile>
+
 </GUIProfiles>
